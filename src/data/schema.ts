@@ -1,4 +1,4 @@
-// ─── Block types ──────────────────────────────────────────────────────────────
+// ——— Block types ————————————————————————————————————————————————————————————
 
 export interface TaskItem {
   id: string
@@ -19,7 +19,16 @@ export interface KpiItem {
   trend?: 'up' | 'down' | 'flat'
 }
 
-export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets'
+export interface ProfileItem {
+  id: string
+  name: string
+  role?: string
+  linkedinUrl?: string
+  email?: string
+  phone?: string
+}
+
+export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets' | 'profiles'
 
 export interface Block {
   id: string
@@ -44,9 +53,11 @@ export interface Block {
   // sheets block
   sheetsUrl?: string
   sheetsEditUrl?: string
+  // profiles block
+  profiles?: ProfileItem[]
 }
 
-// ─── Project ──────────────────────────────────────────────────────────────────
+// ——— Project ————————————————————————————————————————————————————————————————
 
 export type ProjectStatus = 'active' | 'paused' | 'planning' | 'done'
 export type ProjectPriority = 'high' | 'medium' | 'low'
@@ -61,7 +72,7 @@ export interface Project {
   updatedAt: string
 }
 
-// ─── Company ──────────────────────────────────────────────────────────────────
+// ——— Company ————————————————————————————————————————————————————————————————
 
 export interface Company {
   id: string
@@ -73,7 +84,7 @@ export interface Company {
   projects: Project[]
 }
 
-// ─── Social Media ─────────────────────────────────────────────────────────────
+// ——— Social Media ———————————————————————————————————————————————————————————
 
 export interface SocialPlatform {
   id: string
@@ -89,7 +100,7 @@ export interface SocialMediaData {
   platforms: SocialPlatform[]
 }
 
-// ─── Root data ────────────────────────────────────────────────────────────────
+// ——— Root data ——————————————————————————————————————————————————————————————
 
 export interface AppData {
   companies: Company[]
