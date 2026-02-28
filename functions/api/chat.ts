@@ -35,11 +35,12 @@ const MAX_TURNS = 10
 // ─── Schema string provided to the agent as context ──────────────────────────
 
 const SCHEMA = `
-type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets'
+type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets' | 'profiles'
 
-interface TaskItem { id: string; text: string; done: boolean }
-interface LinkItem { id: string; label: string; url: string }
-interface KpiItem  { id: string; label: string; value: string; trend?: 'up'|'down'|'flat' }
+interface TaskItem    { id: string; text: string; done: boolean }
+interface LinkItem    { id: string; label: string; url: string }
+interface KpiItem     { id: string; label: string; value: string; trend?: 'up'|'down'|'flat' }
+interface ProfileItem { id: string; name: string; role?: string; linkedinUrl?: string; email?: string; phone?: string }
 
 interface Block {
   id: string; type: BlockType; title: string
@@ -48,6 +49,7 @@ interface Block {
   calendarUrl?: string
   canvaUrl?: string; canvaEditUrl?: string
   sheetsUrl?: string; sheetsEditUrl?: string
+  profiles?: ProfileItem[]
 }
 
 type ProjectStatus   = 'active' | 'paused' | 'planning' | 'done'
@@ -111,26 +113,30 @@ const TOOLS = [
     },
   },
   {
-    name: 'write_file',
+    name: 'commit_files',
     description:
-      'Write (create or update) a source file in the GitHub repository. This creates a git commit and triggers a Cloudflare Pages redeploy (~1-2 min). Always read_file first to understand existing content. IMPORTANT: content must be the complete file — never a partial snippet.',
+      'Atomically commit one or more source file changes to GitHub in a single commit, triggering one Cloudflare Pages redeploy (~1-2 min). Always read_file each file first. Provide complete file contents — never partial snippets.',
     input_schema: {
       type: 'object',
       properties: {
-        path: {
-          type: 'string',
-          description: 'File path relative to repo root, e.g. "src/components/Layout.tsx"',
-        },
-        content: {
-          type: 'string',
-          description: 'The complete new file content (not a partial snippet).',
+        files: {
+          type: 'array',
+          description: 'Files to write. Each must have a path and complete content.',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'File path relative to repo root' },
+              content: { type: 'string', description: 'Complete new file content' },
+            },
+            required: ['path', 'content'],
+          },
         },
         message: {
           type: 'string',
-          description: 'Git commit message.',
+          description: 'Git commit message describing all changes.',
         },
       },
-      required: ['path', 'content', 'message'],
+      required: ['files', 'message'],
     },
   },
   {
@@ -224,19 +230,21 @@ async function toolListFiles(env: Env, subpath?: string): Promise<string> {
   return files.join('\n')
 }
 
-async function toolWriteFile(
+async function toolCommitFiles(
   env: Env,
-  path: string,
-  content: string,
+  files: { path: string; content: string }[],
   message: string,
 ): Promise<string> {
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) {
     return JSON.stringify({ error: 'GITHUB_TOKEN or GITHUB_REPO not configured' })
   }
-  if (!content || content.trim().length < 20) {
-    return JSON.stringify({ error: 'Content is empty or too short — write aborted to prevent data loss. Provide the complete file content.' })
+  for (const f of files) {
+    if (!f.content || f.content.trim().length < 20) {
+      return JSON.stringify({ error: `Content for "${f.path}" is empty or too short — commit aborted.` })
+    }
   }
-  const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`
+
+  const api = `https://api.github.com/repos/${env.GITHUB_REPO}`
   const headers = {
     Authorization: `Bearer ${env.GITHUB_TOKEN}`,
     Accept: 'application/vnd.github+json',
@@ -244,37 +252,82 @@ async function toolWriteFile(
     'Content-Type': 'application/json',
   }
 
-  // Get current SHA (required for update)
-  let sha: string | undefined
-  const getRes = await fetch(url, { headers })
-  if (getRes.ok) {
-    const existing = (await getRes.json()) as { sha?: string }
-    sha = existing.sha
+  // 1. Get default branch and HEAD commit SHA
+  const repoRes = await fetch(api, { headers })
+  if (!repoRes.ok) return JSON.stringify({ error: `GitHub repo fetch failed: ${repoRes.status}` })
+  const repo = (await repoRes.json()) as { default_branch: string }
+  const branch = repo.default_branch
+
+  const refRes = await fetch(`${api}/git/ref/heads/${branch}`, { headers })
+  if (!refRes.ok) return JSON.stringify({ error: `GitHub ref fetch failed: ${refRes.status}` })
+  const ref = (await refRes.json()) as { object: { sha: string } }
+  const headSha = ref.object.sha
+
+  // 2. Get the tree SHA from HEAD commit
+  const commitRes = await fetch(`${api}/git/commits/${headSha}`, { headers })
+  if (!commitRes.ok) return JSON.stringify({ error: `GitHub commit fetch failed: ${commitRes.status}` })
+  const commit = (await commitRes.json()) as { tree: { sha: string } }
+  const baseTreeSha = commit.tree.sha
+
+  // 3. Create blobs for each file
+  const treeEntries: { path: string; mode: string; type: string; sha: string }[] = []
+  for (const f of files) {
+    const blobRes = await fetch(`${api}/git/blobs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: f.content, encoding: 'utf-8' }),
+    })
+    if (!blobRes.ok) {
+      const err = await blobRes.text()
+      return JSON.stringify({ error: `Blob creation failed for "${f.path}": ${err}` })
+    }
+    const blob = (await blobRes.json()) as { sha: string }
+    treeEntries.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha })
   }
 
-  // Detect the default branch (master vs main) from the repo metadata
-  let defaultBranch = 'master'
-  const repoRes = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}`, { headers })
-  if (repoRes.ok) {
-    const repoMeta = (await repoRes.json()) as { default_branch?: string }
-    defaultBranch = repoMeta.default_branch ?? 'master'
+  // 4. Create new tree
+  const newTreeRes = await fetch(`${api}/git/trees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
+  })
+  if (!newTreeRes.ok) {
+    const err = await newTreeRes.text()
+    return JSON.stringify({ error: `Tree creation failed: ${err}` })
+  }
+  const newTree = (await newTreeRes.json()) as { sha: string }
+
+  // 5. Create commit
+  const newCommitRes = await fetch(`${api}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, tree: newTree.sha, parents: [headSha] }),
+  })
+  if (!newCommitRes.ok) {
+    const err = await newCommitRes.text()
+    return JSON.stringify({ error: `Commit creation failed: ${err}` })
+  }
+  const newCommit = (await newCommitRes.json()) as { sha: string }
+
+  // 6. Update branch ref
+  const updateRefRes = await fetch(`${api}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ sha: newCommit.sha }),
+  })
+  if (!updateRefRes.ok) {
+    const err = await updateRefRes.text()
+    return JSON.stringify({ error: `Ref update failed: ${err}` })
   }
 
-  const encoded = btoa(unescape(encodeURIComponent(content)))
-  const body: Record<string, string> = { message, content: encoded, branch: defaultBranch }
-  if (sha) body.sha = sha
-
-  const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) })
-  if (!putRes.ok) {
-    const err = await putRes.text()
-    return JSON.stringify({ error: `GitHub write error ${putRes.status}: ${err}` })
-  }
   return JSON.stringify({
     success: true,
-    path,
-    committed: true,
-    preview: content.slice(0, 300) + (content.length > 300 ? '…' : ''),
-    length: content.length,
+    commit: newCommit.sha.slice(0, 7),
+    files: files.map((f) => ({
+      path: f.path,
+      length: f.content.length,
+      preview: f.content.slice(0, 150) + (f.content.length > 150 ? '…' : ''),
+    })),
   })
 }
 
@@ -326,28 +379,28 @@ Key files and their relationships:
 - \`src/data/schema.ts\` — TypeScript types. \`BlockType\` union is the central type.
 - \`src/data/seed.ts\` — initial data seed
 - \`src/context/DataContext.tsx\` — data loading, KV migrations
-- \`src/components/ProjectPage.tsx\` — renders blocks; contains \`BLOCK_LABELS\` and \`BLOCK_ICONS\` as \`Record<BlockType, string>\` — MUST be exhaustive
+- \`src/components/ProjectPage.tsx\` — renders blocks; contains \`BLOCK_LABELS\` and \`BLOCK_ICONS\` as \`Partial<Record<BlockType, string>>\` with fallbacks
 - \`src/components/blocks/\` — one file per block type (TaskBlock, LinksBlock, NotesBlock, KpiBlock, GithubBlock, CalendarBlock, CanvaBlock, SheetsBlock)
 - \`src/components/Layout.tsx\` — app shell with Sidebar + ChatPanel
 - \`src/components/Sidebar.tsx\`, \`Overview.tsx\`, \`CompanyPage.tsx\` — navigation/company views
 - \`functions/api/\` — Cloudflare Pages Functions (data.ts, chat.ts, login.ts, logout.ts)
 
 ## TypeScript Rules — Read Before Touching Schema
-**CRITICAL**: \`BlockType\` is used as an exhaustive \`Record<BlockType, ...>\` in \`ProjectPage.tsx\`.
-If you add or remove a value from \`BlockType\` in \`schema.ts\`, you MUST also:
-1. Update \`BLOCK_LABELS\` in \`ProjectPage.tsx\`
-2. Update \`BLOCK_ICONS\` in \`ProjectPage.tsx\`
+If you add a new value to \`BlockType\` in \`schema.ts\`, you should also:
+1. Add an entry to \`BLOCK_LABELS\` in \`ProjectPage.tsx\` (optional but recommended for display)
+2. Add an entry to \`BLOCK_ICONS\` in \`ProjectPage.tsx\` (optional but recommended)
 3. Create a new block component in \`src/components/blocks/\`
-4. Import and render it in \`ProjectPage.tsx\`
-Failure to do all four steps will break the TypeScript build.
+4. Import and render it in the block-renderer switch in \`ProjectPage.tsx\`
+Steps 1–2 won't break the build (labels use Partial with fallbacks), but steps 3–4 require care.
+**Always commit all changed files together via a single commit_files call.**
 
 ## Guidelines
 - Always call read_data before modifying anything — work with the latest state
 - Use list_files to discover the codebase before modifying unfamiliar areas
 - Generate unique IDs as short random strings (e.g. 'b-abc123', 't-xyz789')
 - When updating data: read → modify in memory → write the complete updated JSON
-- For code changes: read_file first, make minimal targeted changes, write_file with the COMPLETE file content (not a snippet)
-- After write_file, check the preview in the response — if it looks wrong or length is 0, do not proceed
+- For code changes: read_file each file first, make minimal targeted changes, then call commit_files with ALL changed files and their COMPLETE contents in a single call
+- After commit_files, check the preview in the response — if content looks wrong or length is 0, the commit was aborted
 - Code changes trigger a ~1-2 minute Cloudflare Pages redeploy — tell the user
 - Be concise. After completing a task, briefly confirm what was done.
 - If something is unclear, ask before acting.`
@@ -431,7 +484,7 @@ Failure to do all four steps will break the TypeScript build.
       else if (tool.name === 'update_data') actionText = 'Saving changes to database…'
       else if (tool.name === 'get_schema') actionText = 'Loading schema…'
       else if (tool.name === 'read_file') actionText = `Reading file: ${tool.input.path}`
-      else if (tool.name === 'write_file') actionText = `Writing file: ${tool.input.path}`
+      else if (tool.name === 'commit_files') actionText = `Committing ${((tool.input.files as { path: string }[]) ?? []).length} file(s)…`
       else if (tool.name === 'list_files') actionText = tool.input.path ? `Listing files in ${tool.input.path}…` : 'Listing all files…'
 
       sseEvent(writer, { type: 'action', text: actionText })
@@ -446,11 +499,10 @@ Failure to do all four steps will break the TypeScript build.
           result = SCHEMA
         } else if (tool.name === 'read_file') {
           result = await toolReadFile(env, tool.input.path as string)
-        } else if (tool.name === 'write_file') {
-          result = await toolWriteFile(
+        } else if (tool.name === 'commit_files') {
+          result = await toolCommitFiles(
             env,
-            tool.input.path as string,
-            tool.input.content as string,
+            tool.input.files as { path: string; content: string }[],
             tool.input.message as string,
           )
         } else if (tool.name === 'list_files') {
