@@ -430,7 +430,7 @@ Steps 1–2 won't break the build (labels use Partial with fallbacks), but steps
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4096,
+        max_tokens: 16000,
         system: systemPrompt,
         tools: TOOLS,
         messages: anthropicMessages,
