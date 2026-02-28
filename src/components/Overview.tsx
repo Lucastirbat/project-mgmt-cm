@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useData } from '../context/DataContext'
-import type { Project, AppData } from '../data/schema'
+import type { Project, AppData, TaskItem } from '../data/schema'
 
 const statusColor: Record<string, string> = {
   active: '#10b981',
@@ -22,6 +22,8 @@ const priorityStyle: Record<string, { bg: string; text: string }> = {
   medium: { bg: 'rgba(234,179,8,0.12)', text: '#facc15' },
   low: { bg: 'rgba(148,163,184,0.10)', text: '#94a3b8' },
 }
+
+const MAX_TASK_PREVIEW = 3
 
 export default function Overview() {
   const { data, updateData } = useData()
@@ -45,7 +47,7 @@ export default function Overview() {
       name: 'New Project',
       status: 'planning',
       priority: 'medium',
-      description: 'Add a description…',
+      description: 'Add a description\u2026',
       blocks: [
         {
           id: `b-${Date.now()}`,
@@ -107,6 +109,24 @@ export default function Overview() {
     return { total, done }
   }
 
+  // Get preview tasks: incomplete first, then completed, up to MAX_TASK_PREVIEW
+  function getPreviewTasks(project: Project): { tasks: TaskItem[]; remaining: number } {
+    const allTasks: TaskItem[] = []
+    for (const block of project.blocks) {
+      if (block.tasks) {
+        allTasks.push(...block.tasks)
+      }
+    }
+    // Sort: incomplete first, then completed
+    const sorted = [
+      ...allTasks.filter((t) => !t.done),
+      ...allTasks.filter((t) => t.done),
+    ]
+    const preview = sorted.slice(0, MAX_TASK_PREVIEW)
+    const remaining = sorted.length - preview.length
+    return { tasks: preview, remaining }
+  }
+
   return (
     <div className="p-8 max-w-6xl mx-auto animate-fade-in">
       <div className="flex items-start justify-between mb-8">
@@ -160,6 +180,7 @@ export default function Overview() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {allProjects.map(({ project, company }) => {
           const { total, done } = getTaskStats(project)
+          const { tasks: previewTasks, remaining } = getPreviewTasks(project)
           const ps = priorityStyle[project.priority] ?? priorityStyle.low
           const sc = statusColor[project.status] ?? '#6b7280'
           const sl = statusLabel[project.status] ?? project.status
@@ -191,7 +212,7 @@ export default function Overview() {
               </h3>
 
               {/* Description */}
-              {project.description && project.description !== 'Add a description…' && (
+              {project.description && project.description !== 'Add a description\u2026' && (
                 <p className="text-white/50 text-xs line-clamp-2 mb-3">{project.description}</p>
               )}
 
@@ -234,6 +255,39 @@ export default function Overview() {
                   />
                 </div>
               )}
+
+              {/* Task preview list */}
+              {previewTasks.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                  {previewTasks.map((task) => (
+                    <div key={task.id} className="flex items-start gap-2">
+                      <div
+                        className="w-3.5 h-3.5 rounded border flex-shrink-0 mt-[1px] flex items-center justify-center"
+                        style={{
+                          borderColor: task.done ? `${company.color}60` : 'rgba(255,255,255,0.15)',
+                          backgroundColor: task.done ? `${company.color}20` : 'transparent',
+                        }}
+                      >
+                        {task.done && (
+                          <svg className="w-2.5 h-2.5" fill="none" stroke={company.color} viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span
+                        className={`text-[11px] leading-tight ${
+                          task.done ? 'text-white/25 line-through' : 'text-white/55'
+                        }`}
+                      >
+                        {task.text || 'Untitled task'}
+                      </span>
+                    </div>
+                  ))}
+                  {remaining > 0 && (
+                    <p className="text-white/25 text-[10px] pl-5.5">+{remaining} more</p>
+                  )}
+                </div>
+              )}
             </Link>
           )
         })}
@@ -250,7 +304,7 @@ export default function Overview() {
           <div>
             <p className="text-white text-sm font-medium">Social Media</p>
             <p className="text-white/55 text-xs">
-              {data.socialMedia.managerName} · {data.socialMedia.platforms.length} platforms across {data.companies.length} companies
+              {data.socialMedia.managerName} \u00b7 {data.socialMedia.platforms.length} platforms across {data.companies.length} companies
             </p>
           </div>
         </div>
