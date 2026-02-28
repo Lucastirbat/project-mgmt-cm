@@ -33,9 +33,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return jsonResponse({ error: 'Password is required' }, 400)
   }
 
-  // Constant-time comparison to prevent timing attacks
-  const correct = await timingSafeEqual(password, SITE_PASSWORD)
-  if (!correct) {
+  // Constant-time comparison (trim guards against accidental whitespace in env var)
+  if (!timingSafeEqual(password, SITE_PASSWORD.trim())) {
     return jsonResponse({ error: 'Incorrect password' }, 401)
   }
 
@@ -65,26 +64,17 @@ function jsonResponse(body: unknown, status: number, extraHeaders?: Record<strin
 }
 
 /**
- * Constant-time string comparison using HMAC to avoid timing attacks.
- * Both values are HMAC'd with a random key so comparison time is fixed.
+ * Constant-time string comparison via XOR to prevent timing attacks.
  */
-async function timingSafeEqual(a: string, b: string): Promise<boolean> {
-  const key = await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
-  const [sigA, sigB] = await Promise.all([
-    crypto.subtle.sign('HMAC', key, enc.encode(a)),
-    crypto.subtle.sign('HMAC', key, enc.encode(b)),
-  ])
-  // crypto.subtle.verify does a constant-time compare internally
-  return crypto.subtle.verify('HMAC', key, sigA, enc.encode(b)).then(() => {
-    // If b's HMAC matches a's HMAC, they're equal
-    const viewA = new Uint8Array(sigA)
-    const viewB = new Uint8Array(sigB)
-    if (viewA.length !== viewB.length) return false
-    let diff = 0
-    for (let i = 0; i < viewA.length; i++) {
-      diff |= viewA[i] ^ viewB[i]
-    }
-    return diff === 0
-  }).catch(() => false)
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  const len = Math.max(aBytes.length, bBytes.length)
+  // XOR every byte — also folds in length mismatch
+  let diff = aBytes.length ^ bBytes.length
+  for (let i = 0; i < len; i++) {
+    diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0)
+  }
+  return diff === 0
 }
