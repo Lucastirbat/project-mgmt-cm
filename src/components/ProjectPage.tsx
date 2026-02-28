@@ -9,6 +9,7 @@ import KpiBlock from './blocks/KpiBlock'
 import GithubBlock from './blocks/GithubBlock'
 import CalendarBlock from './blocks/CalendarBlock'
 import CanvaBlock from './blocks/CanvaBlock'
+import SheetsBlock from './blocks/SheetsBlock'
 
 const STATUS_OPTIONS: Project['status'][] = ['active', 'paused', 'planning', 'done']
 const PRIORITY_OPTIONS: Project['priority'][] = ['high', 'medium', 'low']
@@ -62,6 +63,8 @@ export default function ProjectPage() {
       repoName: type === 'github' ? '' : undefined,
       canvaUrl: type === 'canva' ? '' : undefined,
       canvaEditUrl: type === 'canva' ? '' : undefined,
+      sheetsUrl: type === 'sheets' ? '' : undefined,
+      sheetsEditUrl: type === 'sheets' ? '' : undefined,
     }
     const newBlock: Block = {
       id: `b-${Date.now()}`,
@@ -286,6 +289,7 @@ function BlockCard({
         {block.type === 'github' && <GithubBlock block={block} color={color} onChange={onChange} />}
         {block.type === 'calendar' && <CalendarBlock block={block} onChange={onChange} />}
         {block.type === 'canva' && <CanvaBlock block={block} onChange={onChange} />}
+        {block.type === 'sheets' && <SheetsBlock block={block} onChange={onChange} />}
       </div>
     </div>
   )
@@ -301,6 +305,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   github: 'GitHub',
   calendar: 'Calendar',
   canva: 'Canva',
+  sheets: 'Sheets',
 }
 
 const BLOCK_ICONS: Record<BlockType, string> = {
@@ -311,6 +316,7 @@ const BLOCK_ICONS: Record<BlockType, string> = {
   github: '⌥',
   calendar: '📅',
   canva: '✏',
+  sheets: '🟩',
 }
 
 const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
@@ -321,6 +327,7 @@ const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
   { type: 'github', label: 'GitHub', icon: '⌥' },
   { type: 'calendar', label: 'Calendar', icon: '📅' },
   { type: 'canva', label: 'Canva', icon: '✏' },
+  { type: 'sheets', label: 'Sheets', icon: '🟩' },
 ]
 
 function formatDate(iso: string): string {

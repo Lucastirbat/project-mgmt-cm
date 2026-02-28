@@ -43,6 +43,13 @@ export const SEED_DATA: AppData = {
               title: 'Resources',
               links: [],
             },
+            {
+              id: 'b-sheet-rx',
+              type: 'sheets',
+              title: 'Fund Sheet',
+              sheetsUrl:
+                'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCXmGXeAkYg4yWrt20Y-bCY5CttBpBeXwwNTmSRAMFMCcCYOvTJR2RS0FiOqAu3iVjUdQn25vjR5Ty/pubhtml?widget=true&headers=false',
+            },
           ],
         },
         {

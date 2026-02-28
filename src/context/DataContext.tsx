@@ -97,6 +97,41 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
     }
   }
 
+  // M3: Add sheets block to ReaktorX "Raising the Fund" project
+  const rxFund = data.companies
+    .find((c) => c.id === 'reaktorx')
+    ?.projects.find((p) => p.id === 'raising-fund')
+  if (rxFund && !rxFund.blocks.some((b) => b.type === 'sheets')) {
+    data = {
+      ...data,
+      companies: data.companies.map((c) =>
+        c.id === 'reaktorx'
+          ? {
+              ...c,
+              projects: c.projects.map((p) =>
+                p.id === 'raising-fund'
+                  ? {
+                      ...p,
+                      blocks: [
+                        ...p.blocks,
+                        {
+                          id: 'b-sheet-rx',
+                          type: 'sheets' as const,
+                          title: 'Fund Sheet',
+                          sheetsUrl:
+                            'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCXmGXeAkYg4yWrt20Y-bCY5CttBpBeXwwNTmSRAMFMCcCYOvTJR2RS0FiOqAu3iVjUdQn25vjR5Ty/pubhtml?widget=true&headers=false',
+                        },
+                      ],
+                    }
+                  : p,
+              ),
+            }
+          : c,
+      ),
+    }
+    changed = true
+  }
+
   return { data, changed }
 }
 
