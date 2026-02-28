@@ -167,6 +167,57 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
     changed = true
   }
 
+  // M5: Add Eastern Europe Tour 2025 project to ReaktorX
+  const rxForTrip = data.companies.find((c) => c.id === 'reaktorx')
+  if (rxForTrip && !rxForTrip.projects.some((p) => p.id === 'euro-trip-2025')) {
+    data = {
+      ...data,
+      companies: data.companies.map((c) =>
+        c.id === 'reaktorx'
+          ? {
+              ...c,
+              projects: [
+                ...c.projects,
+                {
+                  id: 'euro-trip-2025',
+                  name: 'Eastern Europe Tour 2025',
+                  status: 'active' as const,
+                  priority: 'high' as const,
+                  description: 'Live map tracking the SF → Eastern Europe tour (Mar 23 – May 2, 2025).',
+                  updatedAt: new Date().toISOString(),
+                  blocks: [
+                    {
+                      id: 'b-travelmap-1',
+                      type: 'travelmap' as const,
+                      title: 'Route Map',
+                      tripStops: [
+                        { id: 'ts-1',  country: 'Belgium',       capital: 'Brussels',  flag: '🇧🇪', lat: 50.8503, lng: 4.3517,  arrivalDate: '2025-03-23', departureDate: '2025-03-27', events: [], contacts: [] },
+                        { id: 'ts-2',  country: 'Romania',       capital: 'Bucharest', flag: '🇷🇴', lat: 44.4268, lng: 26.1025, arrivalDate: '2025-03-27', departureDate: '2025-04-05', events: [], contacts: [] },
+                        { id: 'ts-3',  country: 'Moldova',       capital: 'Chișinău',  flag: '🇲🇩', lat: 47.0105, lng: 28.8638, arrivalDate: '2025-04-05', departureDate: '2025-04-07', events: [], contacts: [] },
+                        { id: 'ts-4',  country: 'Bulgaria',      capital: 'Sofia',     flag: '🇧🇬', lat: 42.6977, lng: 23.3219, arrivalDate: '2025-04-07', departureDate: '2025-04-09', events: [], contacts: [] },
+                        { id: 'ts-5',  country: 'N. Macedonia',  capital: 'Skopje',    flag: '🇲🇰', lat: 41.9981, lng: 21.4254, arrivalDate: '2025-04-09', departureDate: '2025-04-11', events: [], contacts: [] },
+                        { id: 'ts-6',  country: 'Serbia',        capital: 'Belgrade',  flag: '🇷🇸', lat: 44.7866, lng: 20.4489, arrivalDate: '2025-04-13', departureDate: '2025-04-16', events: [], contacts: [] },
+                        { id: 'ts-7',  country: 'Bosnia',        capital: 'Sarajevo',  flag: '🇧🇦', lat: 43.8563, lng: 18.4131, arrivalDate: '2025-04-16', departureDate: '2025-04-18', events: [], contacts: [] },
+                        { id: 'ts-8',  country: 'Croatia',       capital: 'Zagreb',    flag: '🇭🇷', lat: 45.8150, lng: 15.9819, arrivalDate: '2025-04-18', departureDate: '2025-04-20', events: [], contacts: [] },
+                        { id: 'ts-9',  country: 'Hungary',       capital: 'Budapest',  flag: '🇭🇺', lat: 47.4979, lng: 19.0402, arrivalDate: '2025-04-20', departureDate: '2025-04-22', events: [], contacts: [] },
+                        { id: 'ts-10', country: 'Slovakia',      capital: 'Bratislava',flag: '🇸🇰', lat: 48.1486, lng: 17.1077, arrivalDate: '2025-04-22', departureDate: '2025-04-24', events: [], contacts: [] },
+                        { id: 'ts-11', country: 'Czech Republic',capital: 'Prague',    flag: '🇨🇿', lat: 50.0755, lng: 14.4378, arrivalDate: '2025-04-24', departureDate: '2025-04-26', events: [], contacts: [] },
+                        { id: 'ts-12', country: 'Lithuania',     capital: 'Vilnius',   flag: '🇱🇹', lat: 54.6872, lng: 25.2797, arrivalDate: '2025-04-26', departureDate: '2025-04-27', events: [], contacts: [] },
+                        { id: 'ts-13', country: 'Latvia',        capital: 'Riga',      flag: '🇱🇻', lat: 56.9496, lng: 24.1052, arrivalDate: '2025-04-27', departureDate: '2025-04-28', events: [], contacts: [] },
+                        { id: 'ts-14', country: 'Estonia',       capital: 'Tallinn',   flag: '🇪🇪', lat: 59.4370, lng: 24.7536, arrivalDate: '2025-04-28', departureDate: '2025-04-29', events: [], contacts: [] },
+                        { id: 'ts-15', country: 'Ukraine',       capital: 'Kyiv',      flag: '🇺🇦', lat: 50.4501, lng: 30.5234, arrivalDate: '2025-04-29', departureDate: '2025-05-02', events: [], contacts: [] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }
+          : c,
+      ),
+    }
+    changed = true
+  }
+
   return { data, changed }
 }
 

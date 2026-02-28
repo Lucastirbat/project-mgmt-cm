@@ -11,6 +11,7 @@ import CalendarBlock from './blocks/CalendarBlock'
 import CanvaBlock from './blocks/CanvaBlock'
 import SheetsBlock from './blocks/SheetsBlock'
 import ProfilesBlock from './blocks/ProfilesBlock'
+import TravelMapBlock from './blocks/TravelMapBlock'
 
 const STATUS_OPTIONS: Project['status'][] = ['active', 'paused', 'planning', 'done']
 const PRIORITY_OPTIONS: Project['priority'][] = ['high', 'medium', 'low']
@@ -67,6 +68,7 @@ export default function ProjectPage() {
       sheetsUrl: type === 'sheets' ? '' : undefined,
       sheetsEditUrl: type === 'sheets' ? '' : undefined,
       profiles: type === 'profiles' ? [] : undefined,
+      tripStops: type === 'travelmap' ? [] : undefined,
     }
     const newBlock: Block = {
       id: `b-${Date.now()}`,
@@ -296,6 +298,7 @@ function BlockCard({
         {block.type === 'canva' && <CanvaBlock block={block} onChange={onChange} />}
         {block.type === 'sheets' && <SheetsBlock block={block} onChange={onChange} />}
         {block.type === 'profiles' && <ProfilesBlock block={block} color={color} onChange={onChange} />}
+        {block.type === 'travelmap' && <TravelMapBlock block={block} onChange={onChange} />}
       </div>
     </div>
   )
@@ -313,6 +316,7 @@ const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   canva: 'Canva',
   sheets: 'Sheets',
   profiles: 'CRM',
+  travelmap: 'Travel Map',
 }
 
 const BLOCK_ICONS: Partial<Record<BlockType, string>> = {
@@ -325,6 +329,7 @@ const BLOCK_ICONS: Partial<Record<BlockType, string>> = {
   canva: '◈',
   sheets: '🟩',
   profiles: '👤',
+  travelmap: '🗺',
 }
 
 const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
@@ -337,6 +342,7 @@ const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
   { type: 'canva', label: 'Canva', icon: '◈' },
   { type: 'sheets', label: 'Sheets', icon: '🟩' },
   { type: 'profiles', label: 'CRM', icon: '👤' },
+  { type: 'travelmap', label: 'Travel Map', icon: '🗺' },
 ]
 
 function formatDate(iso: string): string {

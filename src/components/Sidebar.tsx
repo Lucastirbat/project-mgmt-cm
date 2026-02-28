@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useData } from '../context/DataContext'
 
 export default function Sidebar() {
-  const { data, saving } = useData()
+  const { saving } = useData()
   const navigate = useNavigate()
 
   async function handleLogout() {

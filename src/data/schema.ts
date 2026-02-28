@@ -28,7 +28,40 @@ export interface ProfileItem {
   phone?: string
 }
 
-export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets' | 'profiles'
+// ——— Travel Map ——————————————————————————————————————————————————————————————
+
+export interface TripContact {
+  id: string
+  name: string
+  role?: string
+  company?: string
+  linkedin?: string
+  email?: string
+  phone?: string
+  notes?: string
+}
+
+export interface TripEvent {
+  id: string
+  title: string
+  date?: string
+  notes?: string
+}
+
+export interface TripStop {
+  id: string
+  country: string
+  capital: string
+  flag: string
+  lat: number
+  lng: number
+  arrivalDate: string
+  departureDate: string
+  events: TripEvent[]
+  contacts: TripContact[]
+}
+
+export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets' | 'profiles' | 'travelmap'
 
 export interface Block {
   id: string
@@ -55,6 +88,8 @@ export interface Block {
   sheetsEditUrl?: string
   // profiles block
   profiles?: ProfileItem[]
+  // travelmap block
+  tripStops?: TripStop[]
 }
 
 // ——— Project ————————————————————————————————————————————————————————————————
