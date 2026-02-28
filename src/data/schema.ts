@@ -19,7 +19,7 @@ export interface KpiItem {
   trend?: 'up' | 'down' | 'flat'
 }
 
-export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar'
+export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva'
 
 export interface Block {
   id: string
@@ -38,6 +38,8 @@ export interface Block {
   repoName?: string
   // calendar block
   calendarUrl?: string
+  // canva block
+  canvaUrl?: string
 }
 
 // ─── Project ──────────────────────────────────────────────────────────────────
