@@ -45,6 +45,9 @@ export interface TripEvent {
   id: string
   title: string
   date?: string
+  location?: string
+  link?: string
+  sponsorSlot?: string
   notes?: string
 }
 

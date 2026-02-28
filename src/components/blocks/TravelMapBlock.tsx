@@ -346,17 +346,37 @@ function EventCard({
           </svg>
         </button>
       </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          value={event.date ?? ''}
+          onChange={(e) => onUpdate({ ...event, date: e.target.value })}
+          placeholder="Date (e.g. Mar 25)"
+          className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
+        />
+        <input
+          value={event.location ?? ''}
+          onChange={(e) => onUpdate({ ...event, location: e.target.value })}
+          placeholder="Location / Venue"
+          className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
+        />
+      </div>
       <input
-        value={event.date ?? ''}
-        onChange={(e) => onUpdate({ ...event, date: e.target.value })}
-        placeholder="Date (e.g. Apr 14)"
-        className="w-full bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors"
+        value={event.link ?? ''}
+        onChange={(e) => onUpdate({ ...event, link: e.target.value })}
+        placeholder="Luma / event link"
+        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5"
+      />
+      <input
+        value={event.sponsorSlot ?? ''}
+        onChange={(e) => onUpdate({ ...event, sponsorSlot: e.target.value })}
+        placeholder="Sponsor slot (e.g. Lead sponsor open)"
+        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
       />
       <input
         value={event.notes ?? ''}
         onChange={(e) => onUpdate({ ...event, notes: e.target.value })}
         placeholder="Notes"
-        className="w-full bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors"
+        className="w-full bg-transparent text-white/30 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic py-0.5"
       />
     </div>
   )
