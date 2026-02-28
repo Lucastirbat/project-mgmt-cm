@@ -69,7 +69,7 @@ export default function ProjectPage() {
     const newBlock: Block = {
       id: `b-${Date.now()}`,
       type,
-      title: BLOCK_LABELS[type],
+      title: BLOCK_LABELS[type] ?? type,
       ...defaults,
     }
     updateProject({ ...project!, blocks: [...project!.blocks, newBlock] })
@@ -265,7 +265,7 @@ function BlockCard({
     <div className="border border-surface-border rounded-2xl overflow-hidden hover:border-white/15 transition-colors group/block">
       {/* Block header */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-surface-border bg-white/[0.02]">
-        <span className="text-white/25">{BLOCK_ICONS[block.type]}</span>
+        <span className="text-white/25">{BLOCK_ICONS[block.type] ?? '▪'}</span>
         <input
           value={block.title}
           onChange={(e) => onTitleChange(e.target.value)}
@@ -300,7 +300,7 @@ function BlockCard({
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BLOCK_LABELS: Record<BlockType, string> = {
+const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   tasks: 'Tasks',
   links: 'Links',
   notes: 'Notes',
@@ -309,9 +309,10 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   calendar: 'Calendar',
   canva: 'Canva',
   sheets: 'Sheets',
+  profiles: 'Profiles',
 }
 
-const BLOCK_ICONS: Record<BlockType, string> = {
+const BLOCK_ICONS: Partial<Record<BlockType, string>> = {
   tasks: '☑',
   links: '🔗',
   notes: '📝',
@@ -320,6 +321,7 @@ const BLOCK_ICONS: Record<BlockType, string> = {
   calendar: '📅',
   canva: '✏',
   sheets: '🟩',
+  profiles: '👤',
 }
 
 const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
