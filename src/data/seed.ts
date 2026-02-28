@@ -70,6 +70,22 @@ export const SEED_DATA: AppData = {
           ],
         },
         {
+          id: 'events-calendar',
+          name: 'Events Calendar',
+          status: 'active',
+          priority: 'medium',
+          description: 'Upcoming ReaktorX events.',
+          updatedAt: new Date().toISOString(),
+          blocks: [
+            {
+              id: 'b-cal-rx',
+              type: 'calendar',
+              title: 'Events',
+              calendarUrl: 'https://luma.com/embed/calendar/cal-wX9FCql5TyxdFtJ/events',
+            },
+          ],
+        },
+        {
           id: 'website-redo',
           name: 'Website Redo',
           status: 'planning',
@@ -209,6 +225,12 @@ export const SEED_DATA: AppData = {
               tasks: [
                 { id: 't1', text: 'Add upcoming events here', done: false },
               ],
+            },
+            {
+              id: 'b-cal-eu',
+              type: 'calendar',
+              title: 'Events Calendar',
+              calendarUrl: 'https://luma.com/embed/calendar/cal-04KinE3PojvsYbV/events',
             },
           ],
         },

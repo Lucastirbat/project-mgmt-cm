@@ -7,6 +7,7 @@ import LinksBlock from './blocks/LinksBlock'
 import NotesBlock from './blocks/NotesBlock'
 import KpiBlock from './blocks/KpiBlock'
 import GithubBlock from './blocks/GithubBlock'
+import CalendarBlock from './blocks/CalendarBlock'
 
 const STATUS_OPTIONS: Project['status'][] = ['active', 'paused', 'planning', 'done']
 const PRIORITY_OPTIONS: Project['priority'][] = ['high', 'medium', 'low']
@@ -280,6 +281,7 @@ function BlockCard({
         {block.type === 'notes' && <NotesBlock block={block} onChange={onChange} />}
         {block.type === 'kpi' && <KpiBlock block={block} color={color} onChange={onChange} />}
         {block.type === 'github' && <GithubBlock block={block} color={color} onChange={onChange} />}
+        {block.type === 'calendar' && <CalendarBlock block={block} onChange={onChange} />}
       </div>
     </div>
   )
@@ -293,6 +295,7 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   notes: 'Notes',
   kpi: 'Metrics',
   github: 'GitHub',
+  calendar: 'Calendar',
 }
 
 const BLOCK_ICONS: Record<BlockType, string> = {
@@ -301,6 +304,7 @@ const BLOCK_ICONS: Record<BlockType, string> = {
   notes: '📝',
   kpi: '📊',
   github: '⌥',
+  calendar: '📅',
 }
 
 const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
@@ -309,6 +313,7 @@ const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
   { type: 'links', label: 'Links', icon: '🔗' },
   { type: 'notes', label: 'Notes', icon: '📝' },
   { type: 'github', label: 'GitHub', icon: '⌥' },
+  { type: 'calendar', label: 'Calendar', icon: '📅' },
 ]
 
 function formatDate(iso: string): string {
