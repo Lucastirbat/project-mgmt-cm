@@ -46,14 +46,16 @@ export default function CompanyPage() {
       <div className="flex items-start justify-between mb-8">
         <div className="flex items-center gap-4">
           <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl overflow-hidden"
             style={{
               backgroundColor: `${company.color}18`,
               border: `1px solid ${company.color}30`,
               boxShadow: `0 0 24px ${company.color}10`,
             }}
           >
-            {company.emoji}
+            {company.logoUrl
+              ? <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain p-1.5" />
+              : company.emoji}
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-white tracking-tight">{company.name}</h1>

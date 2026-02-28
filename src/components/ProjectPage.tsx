@@ -103,10 +103,13 @@ export default function ProjectPage() {
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-white/30 text-sm mb-6">
         <Link to={`/${companyId}`} className="hover:text-white/60 transition-colors flex items-center gap-1.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: company.color }}
-          />
+          {company.logoUrl ? (
+            <span className="w-4 h-4 rounded overflow-hidden inline-flex items-center justify-center" style={{ backgroundColor: `${company.color}25` }}>
+              <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+            </span>
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: company.color }} />
+          )}
           {company.name}
         </Link>
         <span>/</span>

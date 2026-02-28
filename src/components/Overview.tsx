@@ -61,10 +61,12 @@ function CompanyCard({ company }: { company: Company }) {
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-lg overflow-hidden"
             style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
           >
-            {company.emoji}
+            {company.logoUrl
+              ? <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain p-1" />
+              : company.emoji}
           </div>
           <div>
             <h2 className="text-white font-medium text-sm">{company.name}</h2>

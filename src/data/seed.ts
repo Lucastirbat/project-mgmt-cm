@@ -6,8 +6,9 @@ export const SEED_DATA: AppData = {
       id: 'reaktorx',
       name: 'ReaktorX',
       description: 'VC fund investing in deep tech and frontier science.',
-      color: '#f97316',
+      color: '#a78bfa',
       emoji: '⚡',
+      logoUrl: 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png',
       projects: [
         {
           id: 'raising-fund',
@@ -125,8 +126,9 @@ export const SEED_DATA: AppData = {
       id: 'creative-motion',
       name: 'Creative Motion',
       description: 'Creative studio building workshops, client projects, and original IP.',
-      color: '#6366f1',
+      color: '#7c3aed',
       emoji: '✦',
+      logoUrl: 'https://logo.clearbit.com/creativemotion.io',
       projects: [
         {
           id: 'workshops',
@@ -205,8 +207,9 @@ export const SEED_DATA: AppData = {
       id: 'eu-startup-embassy',
       name: 'European Startup Embassy',
       description: 'Community hub for European startups — events, programs, and the space itself.',
-      color: '#3b82f6',
+      color: '#4ade80',
       emoji: '🏛',
+      logoUrl: 'https://europeanstartupembassy.com/wp-content/uploads/2025/09/ESE-Logo-Basic.svg',
       projects: [
         {
           id: 'events',
@@ -298,8 +301,9 @@ export const SEED_DATA: AppData = {
       id: 'jacquebox',
       name: 'Jacquebox',
       description: 'Startup — building the product, growing the team, shipping fast.',
-      color: '#10b981',
+      color: '#16a34a',
       emoji: '🚀',
+      logoUrl: 'https://jacquebox.com/logo.png',
       projects: [
         {
           id: 'product-development',

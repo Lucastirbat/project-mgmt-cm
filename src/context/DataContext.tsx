@@ -132,6 +132,40 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
     changed = true
   }
 
+  // M4: Update company brand colors and logos
+  const BRAND: Record<string, { color: string; logoUrl: string }> = {
+    reaktorx: {
+      color: '#a78bfa',
+      logoUrl: 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png',
+    },
+    'creative-motion': {
+      color: '#7c3aed',
+      logoUrl: 'https://logo.clearbit.com/creativemotion.io',
+    },
+    'eu-startup-embassy': {
+      color: '#4ade80',
+      logoUrl: 'https://europeanstartupembassy.com/wp-content/uploads/2025/09/ESE-Logo-Basic.svg',
+    },
+    jacquebox: {
+      color: '#16a34a',
+      logoUrl: 'https://jacquebox.com/logo.png',
+    },
+  }
+  const needsBrandUpdate = data.companies.some((c) => {
+    const brand = BRAND[c.id]
+    return brand && (c.color !== brand.color || c.logoUrl !== brand.logoUrl)
+  })
+  if (needsBrandUpdate) {
+    data = {
+      ...data,
+      companies: data.companies.map((c) => {
+        const brand = BRAND[c.id]
+        return brand ? { ...c, color: brand.color, logoUrl: brand.logoUrl } : c
+      }),
+    }
+    changed = true
+  }
+
   return { data, changed }
 }
 

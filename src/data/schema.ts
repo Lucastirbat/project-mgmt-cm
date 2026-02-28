@@ -69,6 +69,7 @@ export interface Company {
   description: string
   color: string
   emoji: string
+  logoUrl?: string
   projects: Project[]
 }
 
