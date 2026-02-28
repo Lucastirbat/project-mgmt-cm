@@ -2,3 +2,11 @@ name = "project-mgmt-cm"
 pages_build_output_dir = "dist"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
+
+# KV namespace for app data
+# Replace the id/preview_id with your actual namespace ID after creating it in
+# the Cloudflare dashboard: Workers & Pages → KV → Create namespace "PM_DATA"
+[[kv_namespaces]]
+binding = "PM_DATA"
+id = "REPLACE_WITH_YOUR_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_YOUR_NAMESPACE_ID"
