@@ -30,16 +30,6 @@ export default function Sidebar() {
         {/* Overview */}
         <SidebarLink to="/" end label="Overview" icon={<OverviewIcon />} />
 
-        {/* Companies */}
-        <div className="mt-4 mb-1.5 px-2">
-          <span className="text-white/25 text-[10px] font-semibold uppercase tracking-widest">
-            Companies
-          </span>
-        </div>
-        {data.companies.map((company) => (
-          <CompanyLink key={company.id} company={company} />
-        ))}
-
         {/* Social Media */}
         <div className="mt-4 mb-1.5 px-2">
           <span className="text-white/25 text-[10px] font-semibold uppercase tracking-widest">
@@ -67,50 +57,7 @@ export default function Sidebar() {
   )
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
-function CompanyLink({ company }: { company: { id: string; name: string; color: string; emoji: string; logoUrl?: string } }) {
-  return (
-    <NavLink
-      to={`/${company.id}`}
-      className={({ isActive }) =>
-        [
-          'flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors group',
-          isActive
-            ? 'bg-white/8 text-white'
-            : 'text-white/50 hover:text-white/80 hover:bg-white/5',
-        ].join(' ')
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {company.logoUrl ? (
-            <span
-              className="w-5 h-5 rounded shrink-0 overflow-hidden flex items-center justify-center transition-all"
-              style={{
-                backgroundColor: `${company.color}25`,
-                opacity: isActive ? 1 : 0.6,
-                boxShadow: isActive ? `0 0 8px ${company.color}60` : 'none',
-              }}
-            >
-              <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
-            </span>
-          ) : (
-            <span
-              className="w-2 h-2 rounded-full shrink-0 transition-all"
-              style={{
-                backgroundColor: company.color,
-                opacity: isActive ? 1 : 0.5,
-                boxShadow: isActive ? `0 0 8px ${company.color}80` : 'none',
-              }}
-            />
-          )}
-          <span className="truncate">{company.name}</span>
-        </>
-      )}
-    </NavLink>
-  )
-}
+// ——— Sub-components ————————————————————————————————————————————————————————
 
 function SidebarLink({
   to,
@@ -142,7 +89,7 @@ function SidebarLink({
   )
 }
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
+// ——— Icons ——————————————————————————————————————————————————————————————————
 
 function CMIcon() {
   return (
