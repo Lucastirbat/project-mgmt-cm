@@ -61,6 +61,7 @@ export default function ProjectPage() {
       repoUrl: type === 'github' ? '' : undefined,
       repoName: type === 'github' ? '' : undefined,
       canvaUrl: type === 'canva' ? '' : undefined,
+      canvaEditUrl: type === 'canva' ? '' : undefined,
     }
     const newBlock: Block = {
       id: `b-${Date.now()}`,

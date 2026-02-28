@@ -40,6 +40,7 @@ export interface Block {
   calendarUrl?: string
   // canva block
   canvaUrl?: string
+  canvaEditUrl?: string
 }
 
 // ─── Project ──────────────────────────────────────────────────────────────────
