@@ -10,6 +10,7 @@ import GithubBlock from './blocks/GithubBlock'
 import CalendarBlock from './blocks/CalendarBlock'
 import CanvaBlock from './blocks/CanvaBlock'
 import SheetsBlock from './blocks/SheetsBlock'
+import ProfilesBlock from './blocks/ProfilesBlock'
 
 const STATUS_OPTIONS: Project['status'][] = ['active', 'paused', 'planning', 'done']
 const PRIORITY_OPTIONS: Project['priority'][] = ['high', 'medium', 'low']
@@ -65,6 +66,7 @@ export default function ProjectPage() {
       canvaEditUrl: type === 'canva' ? '' : undefined,
       sheetsUrl: type === 'sheets' ? '' : undefined,
       sheetsEditUrl: type === 'sheets' ? '' : undefined,
+      profiles: type === 'profiles' ? [] : undefined,
     }
     const newBlock: Block = {
       id: `b-${Date.now()}`,
@@ -246,7 +248,7 @@ export default function ProjectPage() {
   )
 }
 
-// ─── Block Card ───────────────────────────────────────────────────────────────
+// ——— Block Card ————————————————————————————————————————————————————————————
 
 function BlockCard({
   block,
@@ -265,7 +267,7 @@ function BlockCard({
     <div className="border border-surface-border rounded-2xl overflow-hidden hover:border-white/15 transition-colors group/block">
       {/* Block header */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-surface-border bg-white/[0.02]">
-        <span className="text-white/25">{BLOCK_ICONS[block.type] ?? '▪'}</span>
+        <span className="text-white/25">{BLOCK_ICONS[block.type] ?? '◽'}</span>
         <input
           value={block.title}
           onChange={(e) => onTitleChange(e.target.value)}
@@ -293,12 +295,13 @@ function BlockCard({
         {block.type === 'calendar' && <CalendarBlock block={block} onChange={onChange} />}
         {block.type === 'canva' && <CanvaBlock block={block} onChange={onChange} />}
         {block.type === 'sheets' && <SheetsBlock block={block} onChange={onChange} />}
+        {block.type === 'profiles' && <ProfilesBlock block={block} color={color} onChange={onChange} />}
       </div>
     </div>
   )
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ——— Constants ————————————————————————————————————————————————————————————
 
 const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   tasks: 'Tasks',
@@ -309,7 +312,7 @@ const BLOCK_LABELS: Partial<Record<BlockType, string>> = {
   calendar: 'Calendar',
   canva: 'Canva',
   sheets: 'Sheets',
-  profiles: 'Profiles',
+  profiles: 'CRM',
 }
 
 const BLOCK_ICONS: Partial<Record<BlockType, string>> = {
@@ -319,7 +322,7 @@ const BLOCK_ICONS: Partial<Record<BlockType, string>> = {
   kpi: '📊',
   github: '⌥',
   calendar: '📅',
-  canva: '✏',
+  canva: '◈',
   sheets: '🟩',
   profiles: '👤',
 }
@@ -331,8 +334,9 @@ const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
   { type: 'notes', label: 'Notes', icon: '📝' },
   { type: 'github', label: 'GitHub', icon: '⌥' },
   { type: 'calendar', label: 'Calendar', icon: '📅' },
-  { type: 'canva', label: 'Canva', icon: '✏' },
+  { type: 'canva', label: 'Canva', icon: '◈' },
   { type: 'sheets', label: 'Sheets', icon: '🟩' },
+  { type: 'profiles', label: 'CRM', icon: '👤' },
 ]
 
 function formatDate(iso: string): string {
