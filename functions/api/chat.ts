@@ -113,7 +113,7 @@ const TOOLS = [
   {
     name: 'write_file',
     description:
-      'Write (create or update) a source file in the GitHub repository. This creates a git commit and triggers a Cloudflare Pages redeploy (~1-2 min). Always read_file first to understand existing content.',
+      'Write (create or update) a source file in the GitHub repository. This creates a git commit and triggers a Cloudflare Pages redeploy (~1-2 min). Always read_file first to understand existing content. IMPORTANT: content must be the complete file — never a partial snippet.',
     input_schema: {
       type: 'object',
       properties: {
@@ -123,7 +123,7 @@ const TOOLS = [
         },
         content: {
           type: 'string',
-          description: 'The complete new file content.',
+          description: 'The complete new file content (not a partial snippet).',
         },
         message: {
           type: 'string',
@@ -131,6 +131,20 @@ const TOOLS = [
         },
       },
       required: ['path', 'content', 'message'],
+    },
+  },
+  {
+    name: 'list_files',
+    description: 'List all source files in the repository. Use this to discover which files exist before deciding what to read or modify.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Optional subdirectory to list, e.g. "src/components". Omit for full repo tree.',
+        },
+      },
+      required: [],
     },
   },
 ]
@@ -182,6 +196,34 @@ async function toolReadFile(env: Env, path: string): Promise<string> {
   return decoded
 }
 
+async function toolListFiles(env: Env, subpath?: string): Promise<string> {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) {
+    return JSON.stringify({ error: 'GITHUB_TOKEN or GITHUB_REPO not configured' })
+  }
+  // Use Git Trees API with recursive flag for full listing
+  const treeUrl = `https://api.github.com/repos/${env.GITHUB_REPO}/git/trees/HEAD?recursive=1`
+  const res = await fetch(treeUrl, {
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'CM-Projects-Agent/1.0',
+    },
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    return JSON.stringify({ error: `GitHub API error ${res.status}: ${err}` })
+  }
+  const json = (await res.json()) as { tree: { path: string; type: string }[] }
+  let files = json.tree
+    .filter((f) => f.type === 'blob')
+    .map((f) => f.path)
+    .filter((p) => !p.startsWith('dist/') && !p.startsWith('node_modules/'))
+  if (subpath) {
+    files = files.filter((p) => p.startsWith(subpath))
+  }
+  return files.join('\n')
+}
+
 async function toolWriteFile(
   env: Env,
   path: string,
@@ -190,6 +232,9 @@ async function toolWriteFile(
 ): Promise<string> {
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) {
     return JSON.stringify({ error: 'GITHUB_TOKEN or GITHUB_REPO not configured' })
+  }
+  if (!content || content.trim().length < 20) {
+    return JSON.stringify({ error: 'Content is empty or too short — write aborted to prevent data loss. Provide the complete file content.' })
   }
   const url = `https://api.github.com/repos/${env.GITHUB_REPO}/contents/${path}`
   const headers = {
@@ -276,11 +321,33 @@ ${dataSummary}
 ${SCHEMA}
 \`\`\`
 
+## Codebase Map
+Key files and their relationships:
+- \`src/data/schema.ts\` — TypeScript types. \`BlockType\` union is the central type.
+- \`src/data/seed.ts\` — initial data seed
+- \`src/context/DataContext.tsx\` — data loading, KV migrations
+- \`src/components/ProjectPage.tsx\` — renders blocks; contains \`BLOCK_LABELS\` and \`BLOCK_ICONS\` as \`Record<BlockType, string>\` — MUST be exhaustive
+- \`src/components/blocks/\` — one file per block type (TaskBlock, LinksBlock, NotesBlock, KpiBlock, GithubBlock, CalendarBlock, CanvaBlock, SheetsBlock)
+- \`src/components/Layout.tsx\` — app shell with Sidebar + ChatPanel
+- \`src/components/Sidebar.tsx\`, \`Overview.tsx\`, \`CompanyPage.tsx\` — navigation/company views
+- \`functions/api/\` — Cloudflare Pages Functions (data.ts, chat.ts, login.ts, logout.ts)
+
+## TypeScript Rules — Read Before Touching Schema
+**CRITICAL**: \`BlockType\` is used as an exhaustive \`Record<BlockType, ...>\` in \`ProjectPage.tsx\`.
+If you add or remove a value from \`BlockType\` in \`schema.ts\`, you MUST also:
+1. Update \`BLOCK_LABELS\` in \`ProjectPage.tsx\`
+2. Update \`BLOCK_ICONS\` in \`ProjectPage.tsx\`
+3. Create a new block component in \`src/components/blocks/\`
+4. Import and render it in \`ProjectPage.tsx\`
+Failure to do all four steps will break the TypeScript build.
+
 ## Guidelines
 - Always call read_data before modifying anything — work with the latest state
-- Generate unique IDs using a short random string like 'id-' + Math.random().toString(36).slice(2,8) patterns (just pick a plausible unique string like 'b-xyz123')
+- Use list_files to discover the codebase before modifying unfamiliar areas
+- Generate unique IDs as short random strings (e.g. 'b-abc123', 't-xyz789')
 - When updating data: read → modify in memory → write the complete updated JSON
-- For code changes: read_file first, make minimal targeted changes, write_file with a clear commit message
+- For code changes: read_file first, make minimal targeted changes, write_file with the COMPLETE file content (not a snippet)
+- After write_file, check the preview in the response — if it looks wrong or length is 0, do not proceed
 - Code changes trigger a ~1-2 minute Cloudflare Pages redeploy — tell the user
 - Be concise. After completing a task, briefly confirm what was done.
 - If something is unclear, ask before acting.`
@@ -365,6 +432,7 @@ ${SCHEMA}
       else if (tool.name === 'get_schema') actionText = 'Loading schema…'
       else if (tool.name === 'read_file') actionText = `Reading file: ${tool.input.path}`
       else if (tool.name === 'write_file') actionText = `Writing file: ${tool.input.path}`
+      else if (tool.name === 'list_files') actionText = tool.input.path ? `Listing files in ${tool.input.path}…` : 'Listing all files…'
 
       sseEvent(writer, { type: 'action', text: actionText })
 
@@ -385,6 +453,8 @@ ${SCHEMA}
             tool.input.content as string,
             tool.input.message as string,
           )
+        } else if (tool.name === 'list_files') {
+          result = await toolListFiles(env, tool.input.path as string | undefined)
         } else {
           result = JSON.stringify({ error: `Unknown tool: ${tool.name}` })
         }
