@@ -1,10 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useData } from '../context/DataContext'
 
+interface PendingImage {
+  dataUrl: string
+  mimeType: string
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  images?: PendingImage[]
   actions?: string[]
 }
 
@@ -20,6 +26,7 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const { refreshData } = useData()
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -36,13 +43,40 @@ export default function ChatPanel() {
     }
   }, [open])
 
+  // Capture pasted screenshots
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items)
+    const imageItems = items.filter((item) => item.type.startsWith('image/'))
+    if (imageItems.length === 0) return
+    e.preventDefault()
+    for (const item of imageItems) {
+      const file = item.getAsFile()
+      if (!file) continue
+      const reader = new FileReader()
+      reader.onload = () => {
+        setPendingImages((prev) => [
+          ...prev,
+          { dataUrl: reader.result as string, mimeType: file.type },
+        ])
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [])
+
   const sendMessage = useCallback(async () => {
     const text = input.trim()
-    if (!text || streaming) return
+    const images = [...pendingImages]
+    if ((!text && images.length === 0) || streaming) return
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text }
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: text,
+      images: images.length > 0 ? images : undefined,
+    }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
+    setPendingImages([])
     setStreaming(true)
 
     // Build assistant placeholder
@@ -50,9 +84,27 @@ export default function ChatPanel() {
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', actions: [] }
     setMessages((prev) => [...prev, assistantMsg])
 
-    // Build conversation history (all previous messages as user/assistant pairs)
+    // Build conversation history for the API
     const allMsgs = [...messages, userMsg]
-    const apiMessages = allMsgs.map((m) => ({ role: m.role, content: m.content }))
+    const apiMessages = allMsgs.map((m) => {
+      if (m.images && m.images.length > 0) {
+        return {
+          role: m.role,
+          content: [
+            ...m.images.map((img) => ({
+              type: 'image' as const,
+              source: {
+                type: 'base64' as const,
+                media_type: img.mimeType,
+                data: img.dataUrl.split(',')[1], // strip "data:image/png;base64," prefix
+              },
+            })),
+            { type: 'text' as const, text: m.content },
+          ],
+        }
+      }
+      return { role: m.role, content: m.content }
+    })
 
     try {
       const res = await fetch('/api/chat', {
@@ -108,7 +160,6 @@ export default function ChatPanel() {
               ),
             )
           } else if (event.type === 'tool_done') {
-            // Refresh React data when KV was updated
             if (event.tool === 'update_data' && !didRefresh) {
               didRefresh = true
               refreshData().catch(() => {})
@@ -135,7 +186,7 @@ export default function ChatPanel() {
     }
 
     setStreaming(false)
-  }, [input, messages, streaming, refreshData])
+  }, [input, pendingImages, messages, streaming, refreshData])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -143,6 +194,8 @@ export default function ChatPanel() {
       sendMessage()
     }
   }
+
+  const canSend = (input.trim().length > 0 || pendingImages.length > 0) && !streaming
 
   return (
     <>
@@ -174,6 +227,8 @@ export default function ChatPanel() {
             {messages.length === 0 && (
               <div className="text-white/30 text-sm text-center py-8">
                 Ask me to add tasks, update projects, or modify the platform.
+                <br />
+                <span className="text-[11px] text-white/20">Paste screenshots for context.</span>
               </div>
             )}
             {messages.map((msg) => (
@@ -182,26 +237,53 @@ export default function ChatPanel() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
-          <div className="px-3 py-3 border-t border-surface-border flex gap-2 items-end">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={streaming}
-              placeholder="Ask me anything…"
-              rows={1}
-              className="flex-1 resize-none bg-white/5 border border-surface-border rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-accent/50 disabled:opacity-50 scrollbar-thin"
-              style={{ maxHeight: '96px', overflowY: 'auto' }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={streaming || !input.trim()}
-              className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <SendIcon />
-            </button>
+          {/* Input area */}
+          <div className="border-t border-surface-border">
+            {/* Pending image thumbnails */}
+            {pendingImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pt-2.5">
+                {pendingImages.map((img, i) => (
+                  <div key={i} className="relative group/thumb">
+                    <img
+                      src={img.dataUrl}
+                      alt="screenshot"
+                      className="w-16 h-16 rounded-lg object-cover border border-surface-border"
+                    />
+                    <button
+                      onClick={() => setPendingImages((prev) => prev.filter((_, j) => j !== i))}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-surface-card border border-surface-border flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                      aria-label="Remove image"
+                    >
+                      <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="px-3 py-3 flex gap-2 items-end">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={streaming}
+                placeholder={pendingImages.length > 0 ? 'Describe what you need…' : 'Ask me anything… (paste screenshots too)'}
+                rows={1}
+                className="flex-1 resize-none bg-white/5 border border-surface-border rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-accent/50 disabled:opacity-50 scrollbar-thin"
+                style={{ maxHeight: '96px', overflowY: 'auto' }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!canSend}
+                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shrink-0 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <SendIcon />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -213,6 +295,19 @@ function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
+      {/* Pasted images (user only) */}
+      {isUser && msg.images && msg.images.length > 0 && (
+        <div className="flex flex-wrap gap-1 justify-end">
+          {msg.images.map((img, i) => (
+            <img
+              key={i}
+              src={img.dataUrl}
+              alt="screenshot"
+              className="max-w-[220px] max-h-[160px] rounded-xl object-cover border border-surface-border"
+            />
+          ))}
+        </div>
+      )}
       {/* Action pills */}
       {!isUser && msg.actions && msg.actions.length > 0 && (
         <div className="flex flex-col gap-1 w-full">

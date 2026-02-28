@@ -19,9 +19,19 @@ interface Env {
   GITHUB_REPO: string
 }
 
+type ImageContentBlock = {
+  type: 'image'
+  source: { type: 'base64'; media_type: string; data: string }
+}
+
+type TextContentBlock = {
+  type: 'text'
+  text: string
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
-  content: string
+  content: string | Array<ImageContentBlock | TextContentBlock>
 }
 
 interface RequestBody {
