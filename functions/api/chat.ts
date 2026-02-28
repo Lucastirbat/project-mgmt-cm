@@ -170,7 +170,10 @@ async function toolReadFile(env: Env, path: string): Promise<string> {
     const err = await res.text()
     return JSON.stringify({ error: `GitHub API error ${res.status}: ${err}` })
   }
-  const json = (await res.json()) as { content?: string; encoding?: string }
+  const json = (await res.json()) as { content?: string; encoding?: string; type?: string }
+  if (json.type === 'dir' || Array.isArray(json)) {
+    return JSON.stringify({ error: `"${path}" is a directory, not a file. Provide a full file path.` })
+  }
   if (!json.content || json.encoding !== 'base64') {
     return JSON.stringify({ error: 'Unexpected response format from GitHub' })
   }
@@ -204,8 +207,16 @@ async function toolWriteFile(
     sha = existing.sha
   }
 
+  // Detect the default branch (master vs main) from the repo metadata
+  let defaultBranch = 'master'
+  const repoRes = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}`, { headers })
+  if (repoRes.ok) {
+    const repoMeta = (await repoRes.json()) as { default_branch?: string }
+    defaultBranch = repoMeta.default_branch ?? 'master'
+  }
+
   const encoded = btoa(unescape(encodeURIComponent(content)))
-  const body: Record<string, string> = { message, content: encoded, branch: 'main' }
+  const body: Record<string, string> = { message, content: encoded, branch: defaultBranch }
   if (sha) body.sha = sha
 
   const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) })
