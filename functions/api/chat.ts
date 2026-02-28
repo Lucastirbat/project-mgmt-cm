@@ -224,7 +224,13 @@ async function toolWriteFile(
     const err = await putRes.text()
     return JSON.stringify({ error: `GitHub write error ${putRes.status}: ${err}` })
   }
-  return JSON.stringify({ success: true, path, committed: true })
+  return JSON.stringify({
+    success: true,
+    path,
+    committed: true,
+    preview: content.slice(0, 300) + (content.length > 300 ? '…' : ''),
+    length: content.length,
+  })
 }
 
 // ─── SSE helpers ──────────────────────────────────────────────────────────────
