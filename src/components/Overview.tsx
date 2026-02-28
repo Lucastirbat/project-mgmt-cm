@@ -1,22 +1,161 @@
 import { Link } from 'react-router-dom'
 import { useData } from '../context/DataContext'
-import type { Company, Project } from '../data/schema'
+import type { Project } from '../data/schema'
+
+const statusColor: Record<string, string> = {
+  active: '#10b981',
+  paused: '#f59e0b',
+  planning: '#6366f1',
+  done: '#6b7280',
+}
+
+const statusLabel: Record<string, string> = {
+  active: 'Active',
+  paused: 'Paused',
+  planning: 'Planning',
+  done: 'Done',
+}
+
+const priorityStyle: Record<string, { bg: string; text: string }> = {
+  high: { bg: 'rgba(239,68,68,0.12)', text: '#f87171' },
+  medium: { bg: 'rgba(234,179,8,0.12)', text: '#facc15' },
+  low: { bg: 'rgba(148,163,184,0.10)', text: '#94a3b8' },
+}
 
 export default function Overview() {
   const { data } = useData()
+
+  // Flatten all projects with their parent company info
+  const allProjects = data.companies.flatMap((company) =>
+    company.projects.map((project) => ({
+      project,
+      company: {
+        id: company.id,
+        name: company.name,
+        color: company.color,
+        emoji: company.emoji,
+        logoUrl: company.logoUrl,
+      },
+    }))
+  )
+
+  // Sort: active first, then by priority (high > medium > low), then alphabetical
+  const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
+  const statusOrder: Record<string, number> = { active: 0, planning: 1, paused: 2, done: 3 }
+
+  allProjects.sort((a, b) => {
+    const sa = statusOrder[a.project.status] ?? 9
+    const sb = statusOrder[b.project.status] ?? 9
+    if (sa !== sb) return sa - sb
+    const pa = priorityOrder[a.project.priority] ?? 9
+    const pb = priorityOrder[b.project.priority] ?? 9
+    if (pa !== pb) return pa - pb
+    return a.project.name.localeCompare(b.project.name)
+  })
+
+  // Count tasks
+  function getTaskStats(project: Project) {
+    let total = 0
+    let done = 0
+    for (const block of project.blocks) {
+      if (block.tasks) {
+        total += block.tasks.length
+        done += block.tasks.filter((t) => t.done).length
+      }
+    }
+    return { total, done }
+  }
 
   return (
     <div className="p-8 max-w-6xl mx-auto animate-fade-in">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-white tracking-tight">Overview</h1>
-        <p className="text-white/40 text-sm mt-1">All companies and their current status.</p>
+        <p className="text-white/40 text-sm mt-1">
+          {allProjects.length} projects across {data.companies.length} companies
+        </p>
       </div>
 
-      {/* Company cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {data.companies.map((company) => (
-          <CompanyCard key={company.id} company={company} />
-        ))}
+      {/* Projects grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {allProjects.map(({ project, company }) => {
+          const { total, done } = getTaskStats(project)
+          const ps = priorityStyle[project.priority] ?? priorityStyle.low
+          const sc = statusColor[project.status] ?? '#6b7280'
+          const sl = statusLabel[project.status] ?? project.status
+
+          return (
+            <Link
+              key={project.id}
+              to={`/${company.id}/${project.id}`}
+              className="block border border-surface-border rounded-2xl p-5 hover:border-white/20 transition-all hover:bg-white/[0.02] group"
+            >
+              {/* Company badge */}
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="w-5 h-5 rounded-md flex items-center justify-center text-xs overflow-hidden shrink-0"
+                  style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
+                >
+                  {company.logoUrl ? (
+                    <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                  ) : (
+                    company.emoji
+                  )}
+                </div>
+                <span className="text-white/30 text-xs truncate">{company.name}</span>
+              </div>
+
+              {/* Project name */}
+              <h3 className="text-white font-medium text-sm mb-1 group-hover:text-white/90 transition-colors">
+                {project.name}
+              </h3>
+
+              {/* Description */}
+              {project.description && project.description !== 'Add a description…' && (
+                <p className="text-white/30 text-xs line-clamp-2 mb-3">{project.description}</p>
+              )}
+
+              {/* Status + Priority + Tasks */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {/* Status pill */}
+                <span className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: `${sc}18`, color: sc }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc }} />
+                  {sl}
+                </span>
+
+                {/* Priority pill */}
+                <span
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: ps.bg, color: ps.text }}
+                >
+                  {project.priority}
+                </span>
+
+                {/* Task count */}
+                {total > 0 && (
+                  <span className="text-white/25 text-[10px] ml-auto">
+                    {done}/{total} tasks
+                  </span>
+                )}
+              </div>
+
+              {/* Task progress bar */}
+              {total > 0 && (
+                <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.round((done / total) * 100)}%`,
+                      backgroundColor: company.color,
+                      opacity: 0.6,
+                    }}
+                  />
+                </div>
+              )}
+            </Link>
+          )
+        })}
       </div>
 
       {/* Social media strip */}
@@ -44,90 +183,6 @@ export default function Overview() {
           </svg>
         </Link>
       </div>
-    </div>
-  )
-}
-
-function CompanyCard({ company }: { company: Company }) {
-  const activeCount = company.projects.filter((p) => p.status === 'active').length
-  const totalCount = company.projects.length
-
-  return (
-    <Link
-      to={`/${company.id}`}
-      className="block border border-surface-border rounded-2xl p-5 hover:border-white/20 transition-all hover:bg-white/[0.02] group"
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-lg overflow-hidden"
-            style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
-          >
-            {company.logoUrl
-              ? <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain p-1" />
-              : company.emoji}
-          </div>
-          <div>
-            <h2 className="text-white font-medium text-sm">{company.name}</h2>
-            <p className="text-white/40 text-xs mt-0.5 line-clamp-1">{company.description}</p>
-          </div>
-        </div>
-        <svg
-          className="w-4 h-4 text-white/20 group-hover:text-white/50 transition-colors mt-0.5 shrink-0"
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-
-      {/* Projects preview */}
-      <div className="space-y-1.5">
-        {company.projects.slice(0, 3).map((project) => (
-          <ProjectRow key={project.id} project={project} color={company.color} />
-        ))}
-        {company.projects.length > 3 && (
-          <p className="text-white/25 text-xs pl-1">
-            +{company.projects.length - 3} more
-          </p>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="mt-4 pt-3 border-t border-surface-border flex items-center gap-1.5">
-        <span
-          className="w-1.5 h-1.5 rounded-full"
-          style={{ backgroundColor: company.color }}
-        />
-        <span className="text-white/30 text-xs">
-          {activeCount} active · {totalCount} total
-        </span>
-      </div>
-    </Link>
-  )
-}
-
-function ProjectRow({ project, color }: { project: Project; color: string }) {
-  const statusColor: Record<string, string> = {
-    active: '#10b981',
-    paused: '#f59e0b',
-    planning: '#6366f1',
-    done: '#6b7280',
-  }
-  const dotColor = statusColor[project.status] ?? '#6b7280'
-
-  return (
-    <div className="flex items-center gap-2 px-1">
-      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-      <span className="text-white/60 text-xs truncate">{project.name}</span>
-      {project.priority === 'high' && (
-        <span
-          className="ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
-          style={{ backgroundColor: `${color}20`, color }}
-        >
-          high
-        </span>
-      )}
     </div>
   )
 }
