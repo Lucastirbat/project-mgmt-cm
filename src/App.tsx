@@ -6,11 +6,15 @@ import Overview from './components/Overview'
 import CompanyPage from './components/CompanyPage'
 import ProjectPage from './components/ProjectPage'
 import SocialMediaPage from './components/SocialMediaPage'
+import EmbedTripPage from './components/EmbedTripPage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public embed routes — no auth, no DataProvider */}
+        <Route path="/embed/trip" element={<EmbedTripPage />} />
+
         <Route path="/login" element={<LoginPage />} />
         <Route
           element={

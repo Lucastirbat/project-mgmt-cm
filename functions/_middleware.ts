@@ -12,6 +12,9 @@ const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
 
 // Paths that bypass auth entirely
 const PUBLIC_PATHS = new Set(['/login', '/api/login'])
+// Embed paths are always public (iframed on external sites)
+const isPublicEmbed = (path: string) =>
+  path.startsWith('/embed/') || path.startsWith('/api/embed/')
 
 // Static asset extensions that don't need auth checks
 const STATIC_EXT = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|avif)$/i
@@ -20,8 +23,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url)
   const path = url.pathname
 
-  // Let public paths and static assets through unconditionally
-  if (PUBLIC_PATHS.has(path) || STATIC_EXT.test(path)) {
+  // Let public paths, embed paths, and static assets through unconditionally
+  if (PUBLIC_PATHS.has(path) || isPublicEmbed(path) || STATIC_EXT.test(path)) {
     return context.next()
   }
 
