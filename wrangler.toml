@@ -3,12 +3,9 @@ pages_build_output_dir = "dist"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
-# ── Local development only ──────────────────────────────────────────────────
-# To use KV locally with `npm run pages:dev`, uncomment and fill in your
-# namespace ID from the Cloudflare dashboard (Workers & Pages → KV → PM_DATA).
-# Do NOT uncomment with a placeholder — CF Pages validates the ID at build time.
-#
-# [[kv_namespaces]]
-# binding = "PM_DATA"
-# id = "your-actual-namespace-id-here"
-# preview_id = "your-actual-namespace-id-here"
+# ── KV namespace (local dev) ──────────────────────────────────────────────────
+# Production binding is set in CF Pages dashboard → Settings → Functions → KV bindings
+[[kv_namespaces]]
+binding = "PM_DATA"
+id = "481f658a796a4a349b8a5464618d58b0"
+preview_id = "481f658a796a4a349b8a5464618d58b0"
