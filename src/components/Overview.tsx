@@ -25,9 +25,12 @@ const priorityStyle: Record<string, { bg: string; text: string }> = {
 
 const MAX_TASK_PREVIEW = 3
 
+type SortMode = 'company' | 'priority' | 'status'
+
 export default function Overview() {
   const { data, updateData } = useData()
   const [showDropdown, setShowDropdown] = useState(false)
+  const [sortMode, setSortMode] = useState<SortMode>('status')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown on outside click
@@ -82,11 +85,37 @@ export default function Overview() {
     }))
   )
 
-  // Sort: active first, then by priority (high > medium > low), then alphabetical
+  // Sort orders
   const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
   const statusOrder: Record<string, number> = { active: 0, planning: 1, paused: 2, done: 3 }
 
+  // Build a company order map based on data.companies array order
+  const companyOrder: Record<string, number> = {}
+  data.companies.forEach((c, i) => { companyOrder[c.id] = i })
+
   allProjects.sort((a, b) => {
+    if (sortMode === 'company') {
+      const ca = companyOrder[a.company.id] ?? 99
+      const cb = companyOrder[b.company.id] ?? 99
+      if (ca !== cb) return ca - cb
+      // Within same company, sort by priority then name
+      const pa = priorityOrder[a.project.priority] ?? 9
+      const pb = priorityOrder[b.project.priority] ?? 9
+      if (pa !== pb) return pa - pb
+      return a.project.name.localeCompare(b.project.name)
+    }
+
+    if (sortMode === 'priority') {
+      const pa = priorityOrder[a.project.priority] ?? 9
+      const pb = priorityOrder[b.project.priority] ?? 9
+      if (pa !== pb) return pa - pb
+      const sa = statusOrder[a.project.status] ?? 9
+      const sb = statusOrder[b.project.status] ?? 9
+      if (sa !== sb) return sa - sb
+      return a.project.name.localeCompare(b.project.name)
+    }
+
+    // Default: status
     const sa = statusOrder[a.project.status] ?? 9
     const sb = statusOrder[b.project.status] ?? 9
     if (sa !== sb) return sa - sb
@@ -126,6 +155,36 @@ export default function Overview() {
     const remaining = sorted.length - preview.length
     return { tasks: preview, remaining }
   }
+
+  const sortButtons: { mode: SortMode; label: string; icon: JSX.Element }[] = [
+    {
+      mode: 'company',
+      label: 'Company',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+    },
+    {
+      mode: 'priority',
+      label: 'Priority',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+        </svg>
+      ),
+    },
+    {
+      mode: 'status',
+      label: 'Status',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+  ]
 
   return (
     <div className="p-8 max-w-6xl mx-auto animate-fade-in">
@@ -174,6 +233,25 @@ export default function Overview() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Sort buttons */}
+      <div className="flex items-center gap-2 mb-5">
+        <span className="text-white/40 text-xs font-medium mr-1">Sort by</span>
+        {sortButtons.map(({ mode, label, icon }) => (
+          <button
+            key={mode}
+            onClick={() => setSortMode(mode)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              sortMode === mode
+                ? 'bg-white/10 text-white border-white/20'
+                : 'bg-white/[0.03] text-white/50 border-surface-border hover:bg-white/[0.06] hover:text-white/70'
+            }`}
+          >
+            {icon}
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Projects grid */}
