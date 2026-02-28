@@ -15,6 +15,7 @@ interface DataContextValue {
   loading: boolean
   saving: boolean
   updateData: (next: AppData) => void
+  refreshData: () => Promise<void>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -140,7 +141,7 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
     },
     'creative-motion': {
       color: '#7c3aed',
-      logoUrl: 'https://logo.clearbit.com/creativemotion.io',
+      logoUrl: '',
     },
     'eu-startup-embassy': {
       color: '#4ade80',
@@ -160,7 +161,7 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
       ...data,
       companies: data.companies.map((c) => {
         const brand = BRAND[c.id]
-        return brand ? { ...c, color: brand.color, logoUrl: brand.logoUrl } : c
+        return brand ? { ...c, color: brand.color, logoUrl: brand.logoUrl || undefined } : c
       }),
     }
     changed = true
@@ -198,6 +199,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  // Re-fetch from KV and apply migrations (called after agent updates data)
+  const refreshData = useCallback(async () => {
+    try {
+      const r = await fetch('/api/data')
+      const d: AppData = await r.json()
+      if (d && d.companies) {
+        const { data: migrated } = migrate(d)
+        setData(migrated)
+      }
+    } catch {
+      // silent — keep current state
+    }
+  }, [])
+
   // Debounced save to KV
   const updateData = useCallback((next: AppData) => {
     setData(next)
@@ -219,7 +234,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <DataContext.Provider value={{ data, loading, saving, updateData }}>
+    <DataContext.Provider value={{ data, loading, saving, updateData, refreshData }}>
       {children}
     </DataContext.Provider>
   )

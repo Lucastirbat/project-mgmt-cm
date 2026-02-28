@@ -127,8 +127,7 @@ export const SEED_DATA: AppData = {
       name: 'Creative Motion',
       description: 'Creative studio building workshops, client projects, and original IP.',
       color: '#7c3aed',
-      emoji: '✦',
-      logoUrl: 'https://logo.clearbit.com/creativemotion.io',
+      emoji: '⚙',
       projects: [
         {
           id: 'workshops',
