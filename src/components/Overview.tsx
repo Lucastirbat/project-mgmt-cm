@@ -25,6 +25,18 @@ const priorityStyle: Record<string, { bg: string; text: string }> = {
 
 const MAX_TASK_PREVIEW = 3
 
+const TODAY_ISO = new Date().toISOString().slice(0, 10)
+
+function deadlineColor(deadline?: string): string {
+  if (!deadline) return 'rgba(255,255,255,0.45)'
+  const parsed = new Date(deadline)
+  if (isNaN(parsed.getTime())) return 'rgba(255,255,255,0.45)'
+  const iso = parsed.toISOString().slice(0, 10)
+  if (iso < TODAY_ISO) return '#f87171'
+  if (iso <= new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)) return '#fbbf24'
+  return 'rgba(255,255,255,0.45)'
+}
+
 type SortMode = 'company' | 'priority' | 'status'
 
 export default function Overview() {
@@ -311,6 +323,25 @@ export default function Overview() {
                 >
                   {project.priority}
                 </span>
+
+                {/* Owner */}
+                {project.owner && (
+                  <span className="text-[10px] text-white/45 flex items-center gap-1">
+                    <span>👤</span>
+                    {project.owner}
+                  </span>
+                )}
+
+                {/* Deadline */}
+                {project.deadline && (
+                  <span
+                    className="text-[10px] flex items-center gap-1"
+                    style={{ color: deadlineColor(project.deadline) }}
+                  >
+                    <span>📅</span>
+                    {project.deadline}
+                  </span>
+                )}
 
                 {/* Task count */}
                 {total > 0 && (
