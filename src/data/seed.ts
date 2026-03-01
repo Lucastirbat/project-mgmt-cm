@@ -297,6 +297,33 @@ export const SEED_DATA: AppData = {
       ],
     },
     {
+      id: 'personal-brand',
+      name: 'Personal Brand',
+      description: 'Personal visibility, content, networking, and public presence.',
+      color: '#f472b6',
+      emoji: '✨',
+      projects: [
+        {
+          id: 'content',
+          name: 'Content',
+          status: 'active',
+          priority: 'medium',
+          description: 'Content creation — posts, articles, videos, and newsletters.',
+          updatedAt: new Date().toISOString(),
+          blocks: [
+            {
+              id: 'b-pb-tasks',
+              type: 'tasks',
+              title: 'Content Tasks',
+              tasks: [
+                { id: 't-pb-1', text: 'Add your content tasks here', done: false },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: 'jacquebox',
       name: 'Jacquebox',
       description: 'Startup — building the product, growing the team, shipping fast.',

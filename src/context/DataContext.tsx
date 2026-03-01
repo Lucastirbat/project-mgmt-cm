@@ -63,6 +63,42 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
     changed = true
   }
 
+  // M7: Add Personal Brand company if it doesn't exist yet
+  if (!data.companies.find((c) => c.id === 'personal-brand')) {
+    data = {
+      ...data,
+      companies: [
+        ...data.companies,
+        {
+          id: 'personal-brand',
+          name: 'Personal Brand',
+          description: 'Personal visibility, content, networking, and public presence.',
+          color: '#f472b6',
+          emoji: '✨',
+          projects: [
+            {
+              id: 'content',
+              name: 'Content',
+              status: 'active' as const,
+              priority: 'medium' as const,
+              description: 'Content creation — posts, articles, videos, and newsletters.',
+              updatedAt: new Date().toISOString(),
+              blocks: [
+                {
+                  id: 'b-pb-tasks',
+                  type: 'tasks' as const,
+                  title: 'Content Tasks',
+                  tasks: [{ id: 't-pb-1', text: 'Add your content tasks here', done: false }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    changed = true
+  }
+
   // M6: Fix euro-trip-2025 stop dates from 2025 → 2026
   const rxTrip = data.companies
     .find((c) => c.id === 'reaktorx')
