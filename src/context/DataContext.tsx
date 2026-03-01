@@ -21,117 +21,13 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null)
 
 // ─── Migrations ───────────────────────────────────────────────────────────────
-// Each migration is idempotent — checks before adding, so safe to run on every load.
+// Only keep migrations that patch values in-place (safe to re-run).
+// Migrations that ADD new projects/blocks have been removed — they prevented
+// users from deleting those items (migration re-added them on every load).
 
 function migrate(raw: AppData): { data: AppData; changed: boolean } {
   let data = raw
   let changed = false
-
-  // M1: Add ReaktorX events-calendar project with Luma embed
-  const rx = data.companies.find((c) => c.id === 'reaktorx')
-  if (rx && !rx.projects.some((p) => p.id === 'events-calendar')) {
-    data = {
-      ...data,
-      companies: data.companies.map((c) =>
-        c.id === 'reaktorx'
-          ? {
-              ...c,
-              projects: [
-                ...c.projects,
-                {
-                  id: 'events-calendar',
-                  name: 'Events Calendar',
-                  status: 'active' as const,
-                  priority: 'medium' as const,
-                  description: 'Upcoming ReaktorX events.',
-                  updatedAt: new Date().toISOString(),
-                  blocks: [
-                    {
-                      id: 'b-cal-rx',
-                      type: 'calendar' as const,
-                      title: 'Events',
-                      calendarUrl: 'https://luma.com/embed/calendar/cal-wX9FCql5TyxdFtJ/events',
-                    },
-                  ],
-                },
-              ],
-            }
-          : c,
-      ),
-    }
-    changed = true
-  }
-
-  // M2: Add calendar block to EU Startup Embassy Events project
-  const eu = data.companies.find((c) => c.id === 'eu-startup-embassy')
-  if (eu) {
-    const eventsProject = eu.projects.find((p) => p.id === 'events')
-    if (eventsProject && !eventsProject.blocks.some((b) => b.type === 'calendar')) {
-      data = {
-        ...data,
-        companies: data.companies.map((c) =>
-          c.id === 'eu-startup-embassy'
-            ? {
-                ...c,
-                projects: c.projects.map((p) =>
-                  p.id === 'events'
-                    ? {
-                        ...p,
-                        blocks: [
-                          ...p.blocks,
-                          {
-                            id: 'b-cal-eu',
-                            type: 'calendar' as const,
-                            title: 'Events Calendar',
-                            calendarUrl:
-                              'https://luma.com/embed/calendar/cal-04KinE3PojvsYbV/events',
-                          },
-                        ],
-                      }
-                    : p,
-                ),
-              }
-            : c,
-        ),
-      }
-      changed = true
-    }
-  }
-
-  // M3: Add sheets block to ReaktorX "Raising the Fund" project
-  const rxFund = data.companies
-    .find((c) => c.id === 'reaktorx')
-    ?.projects.find((p) => p.id === 'raising-fund')
-  if (rxFund && !rxFund.blocks.some((b) => b.type === 'sheets')) {
-    data = {
-      ...data,
-      companies: data.companies.map((c) =>
-        c.id === 'reaktorx'
-          ? {
-              ...c,
-              projects: c.projects.map((p) =>
-                p.id === 'raising-fund'
-                  ? {
-                      ...p,
-                      blocks: [
-                        ...p.blocks,
-                        {
-                          id: 'b-sheet-rx',
-                          type: 'sheets' as const,
-                          title: 'Fund Sheet',
-                          sheetsUrl:
-                            'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCXmGXeAkYg4yWrt20Y-bCY5CttBpBeXwwNTmSRAMFMCcCYOvTJR2RS0FiOqAu3iVjUdQn25vjR5Ty/pubhtml?widget=true&headers=false',
-                        },
-                      ],
-                    }
-                  : p,
-              ),
-            }
-          : c,
-      ),
-    }
-    changed = true
-  }
 
   // M4: Update company brand colors and logos
   const BRAND: Record<string, { color: string; logoUrl: string }> = {
@@ -163,57 +59,6 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
         const brand = BRAND[c.id]
         return brand ? { ...c, color: brand.color, logoUrl: brand.logoUrl || undefined } : c
       }),
-    }
-    changed = true
-  }
-
-  // M5: Add Eastern Europe Tour 2025 project to ReaktorX
-  const rxForTrip = data.companies.find((c) => c.id === 'reaktorx')
-  if (rxForTrip && !rxForTrip.projects.some((p) => p.id === 'euro-trip-2025')) {
-    data = {
-      ...data,
-      companies: data.companies.map((c) =>
-        c.id === 'reaktorx'
-          ? {
-              ...c,
-              projects: [
-                ...c.projects,
-                {
-                  id: 'euro-trip-2025',
-                  name: 'Eastern Europe Tour 2025',
-                  status: 'active' as const,
-                  priority: 'high' as const,
-                  description: 'Live map tracking the SF → Eastern Europe tour (Mar 23 – May 2, 2025).',
-                  updatedAt: new Date().toISOString(),
-                  blocks: [
-                    {
-                      id: 'b-travelmap-1',
-                      type: 'travelmap' as const,
-                      title: 'Route Map',
-                      tripStops: [
-                        { id: 'ts-1',  country: 'Belgium',       capital: 'Brussels',  flag: '🇧🇪', lat: 50.8503, lng: 4.3517,  arrivalDate: '2026-03-23', departureDate: '2026-03-27', events: [], contacts: [] },
-                        { id: 'ts-2',  country: 'Romania',       capital: 'Bucharest', flag: '🇷🇴', lat: 44.4268, lng: 26.1025, arrivalDate: '2026-03-27', departureDate: '2026-04-05', events: [], contacts: [] },
-                        { id: 'ts-3',  country: 'Moldova',       capital: 'Chișinău',  flag: '🇲🇩', lat: 47.0105, lng: 28.8638, arrivalDate: '2026-04-05', departureDate: '2026-04-07', events: [], contacts: [] },
-                        { id: 'ts-4',  country: 'Bulgaria',      capital: 'Sofia',     flag: '🇧🇬', lat: 42.6977, lng: 23.3219, arrivalDate: '2026-04-07', departureDate: '2026-04-09', events: [], contacts: [] },
-                        { id: 'ts-5',  country: 'N. Macedonia',  capital: 'Skopje',    flag: '🇲🇰', lat: 41.9981, lng: 21.4254, arrivalDate: '2026-04-09', departureDate: '2026-04-11', events: [], contacts: [] },
-                        { id: 'ts-6',  country: 'Serbia',        capital: 'Belgrade',  flag: '🇷🇸', lat: 44.7866, lng: 20.4489, arrivalDate: '2026-04-13', departureDate: '2026-04-16', events: [], contacts: [] },
-                        { id: 'ts-7',  country: 'Bosnia',        capital: 'Sarajevo',  flag: '🇧🇦', lat: 43.8563, lng: 18.4131, arrivalDate: '2026-04-16', departureDate: '2026-04-18', events: [], contacts: [] },
-                        { id: 'ts-8',  country: 'Croatia',       capital: 'Zagreb',    flag: '🇭🇷', lat: 45.8150, lng: 15.9819, arrivalDate: '2026-04-18', departureDate: '2026-04-20', events: [], contacts: [] },
-                        { id: 'ts-9',  country: 'Hungary',       capital: 'Budapest',  flag: '🇭🇺', lat: 47.4979, lng: 19.0402, arrivalDate: '2026-04-20', departureDate: '2026-04-22', events: [], contacts: [] },
-                        { id: 'ts-10', country: 'Slovakia',      capital: 'Bratislava',flag: '🇸🇰', lat: 48.1486, lng: 17.1077, arrivalDate: '2026-04-22', departureDate: '2026-04-24', events: [], contacts: [] },
-                        { id: 'ts-11', country: 'Czech Republic',capital: 'Prague',    flag: '🇨🇿', lat: 50.0755, lng: 14.4378, arrivalDate: '2026-04-24', departureDate: '2026-04-26', events: [], contacts: [] },
-                        { id: 'ts-12', country: 'Lithuania',     capital: 'Vilnius',   flag: '🇱🇹', lat: 54.6872, lng: 25.2797, arrivalDate: '2026-04-26', departureDate: '2026-04-27', events: [], contacts: [] },
-                        { id: 'ts-13', country: 'Latvia',        capital: 'Riga',      flag: '🇱🇻', lat: 56.9496, lng: 24.1052, arrivalDate: '2026-04-27', departureDate: '2026-04-28', events: [], contacts: [] },
-                        { id: 'ts-14', country: 'Estonia',       capital: 'Tallinn',   flag: '🇪🇪', lat: 59.4370, lng: 24.7536, arrivalDate: '2026-04-28', departureDate: '2026-04-29', events: [], contacts: [] },
-                        { id: 'ts-15', country: 'Ukraine',       capital: 'Kyiv',      flag: '🇺🇦', lat: 50.4501, lng: 30.5234, arrivalDate: '2026-04-29', departureDate: '2026-05-02', events: [], contacts: [] },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            }
-          : c,
-      ),
     }
     changed = true
   }
