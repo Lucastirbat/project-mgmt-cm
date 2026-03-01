@@ -1,9 +1,43 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useData } from '../context/DataContext'
 
+const MEMBER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899']
+function memberColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff
+  return MEMBER_COLORS[hash % MEMBER_COLORS.length]
+}
+
 export default function Sidebar() {
-  const { saving } = useData()
+  const { data, saving } = useData()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const selectedMember = new URLSearchParams(location.search).get('member')
+
+  // Collect unique team members from owners + assignees across all data
+  const teamMembers = (() => {
+    const names = new Set<string>()
+    for (const company of data.companies) {
+      for (const project of company.projects) {
+        if (project.owner?.trim()) names.add(project.owner.trim())
+        for (const block of project.blocks) {
+          for (const task of block.tasks ?? []) {
+            if (task.assignee?.trim()) names.add(task.assignee.trim())
+          }
+        }
+      }
+    }
+    return Array.from(names).sort()
+  })()
+
+  function handleMemberClick(name: string) {
+    if (selectedMember === name) {
+      navigate('/')
+    } else {
+      navigate(`/?member=${encodeURIComponent(name)}`)
+    }
+  }
 
   async function handleLogout() {
     await fetch('/api/logout', { method: 'POST' }).catch(() => {})
@@ -17,30 +51,48 @@ export default function Sidebar() {
         <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center shrink-0">
           <CMIcon />
         </div>
-        <span className="text-white font-medium text-sm tracking-tight truncate">
-          CM Projects
-        </span>
-        {saving && (
-          <span className="ml-auto text-white/20 text-[10px] shrink-0">saving…</span>
-        )}
+        <span className="text-white font-medium text-sm tracking-tight truncate">CM Projects</span>
+        {saving && <span className="ml-auto text-white/20 text-[10px] shrink-0">saving…</span>}
       </div>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2">
-        {/* Overview */}
         <SidebarLink to="/" end label="Overview" icon={<OverviewIcon />} />
 
-        {/* Social Media */}
-        <div className="mt-4 mb-1.5 px-2">
-          <span className="text-white/25 text-[10px] font-semibold uppercase tracking-widest">
-            Team
-          </span>
-        </div>
-        <SidebarLink
-          to="/social-media"
-          label="Social Media"
-          icon={<SocialIcon />}
-        />
+        {/* Team */}
+        {teamMembers.length > 0 && (
+          <>
+            <div className="mt-4 mb-1.5 px-2">
+              <span className="text-white/25 text-[10px] font-semibold uppercase tracking-widest">
+                Team
+              </span>
+            </div>
+            {teamMembers.map((name) => {
+              const color = memberColor(name)
+              const isSelected = selectedMember === name
+              return (
+                <button
+                  key={name}
+                  onClick={() => handleMemberClick(name)}
+                  className={[
+                    'w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors text-left',
+                    isSelected
+                      ? 'bg-white/8 text-white'
+                      : 'text-white/50 hover:text-white/80 hover:bg-white/5',
+                  ].join(' ')}
+                >
+                  <div
+                    className="w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold shrink-0"
+                    style={{ backgroundColor: `${color}30`, color }}
+                  >
+                    {name[0].toUpperCase()}
+                  </div>
+                  <span className="truncate">{name}</span>
+                </button>
+              )
+            })}
+          </>
+        )}
       </nav>
 
       {/* Footer */}
@@ -59,17 +111,7 @@ export default function Sidebar() {
 
 // ——— Sub-components ————————————————————————————————————————————————————————
 
-function SidebarLink({
-  to,
-  label,
-  icon,
-  end,
-}: {
-  to: string
-  label: string
-  icon: React.ReactNode
-  end?: boolean
-}) {
+function SidebarLink({ to, label, icon, end }: { to: string; label: string; icon: React.ReactNode; end?: boolean }) {
   return (
     <NavLink
       to={to}
@@ -77,9 +119,7 @@ function SidebarLink({
       className={({ isActive }) =>
         [
           'flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors',
-          isActive
-            ? 'bg-white/8 text-white'
-            : 'text-white/50 hover:text-white/80 hover:bg-white/5',
+          isActive ? 'bg-white/8 text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/5',
         ].join(' ')
       }
     >
@@ -105,14 +145,6 @@ function OverviewIcon() {
   return (
     <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-    </svg>
-  )
-}
-
-function SocialIcon() {
-  return (
-    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
     </svg>
   )
 }
