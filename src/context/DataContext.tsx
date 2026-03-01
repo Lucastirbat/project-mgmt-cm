@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { AppData } from '../data/schema'
-import { SEED_DATA } from '../data/seed'
+import { SEED_DATA, PERSONAL_BRAND_COMPANY } from '../data/seed'
 
 interface DataContextValue {
   data: AppData
@@ -67,36 +67,28 @@ function migrate(raw: AppData): { data: AppData; changed: boolean } {
   if (!data.companies.find((c) => c.id === 'personal-brand')) {
     data = {
       ...data,
-      companies: [
-        ...data.companies,
-        {
-          id: 'personal-brand',
-          name: 'Personal Brand',
-          description: 'Personal visibility, content, networking, and public presence.',
-          color: '#f472b6',
-          emoji: '✨',
-          projects: [
-            {
-              id: 'content',
-              name: 'Content',
-              status: 'active' as const,
-              priority: 'medium' as const,
-              description: 'Content creation — posts, articles, videos, and newsletters.',
-              updatedAt: new Date().toISOString(),
-              blocks: [
-                {
-                  id: 'b-pb-tasks',
-                  type: 'tasks' as const,
-                  title: 'Content Tasks',
-                  tasks: [{ id: 't-pb-1', text: 'Add your content tasks here', done: false }],
-                },
-              ],
-            },
-          ],
-        },
-      ],
+      companies: [...data.companies, PERSONAL_BRAND_COMPANY],
     }
     changed = true
+  }
+
+  // M8: Upgrade Personal Brand from the initial stub (single "content" project)
+  // to the full project set. Only triggers once during migration.
+  {
+    const pb = data.companies.find((c) => c.id === 'personal-brand')
+    const needsUpgrade =
+      pb &&
+      pb.projects.some((p) => p.id === 'content') &&
+      !pb.projects.some((p) => p.id === 'pb-founder-profile')
+    if (needsUpgrade) {
+      data = {
+        ...data,
+        companies: data.companies.map((c) =>
+          c.id === 'personal-brand' ? { ...c, projects: PERSONAL_BRAND_COMPANY.projects } : c,
+        ),
+      }
+      changed = true
+    }
   }
 
   // M6: Fix euro-trip-2025 stop dates from 2025 → 2026
