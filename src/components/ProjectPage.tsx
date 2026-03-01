@@ -192,6 +192,29 @@ export default function ProjectPage() {
             ))}
           </div>
 
+          {/* Owner */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-card border border-surface-border rounded-xl">
+            <span className="text-white/25 text-xs">👤</span>
+            <input
+              value={project.owner ?? ''}
+              onChange={(e) => updateProject({ ...project, owner: e.target.value })}
+              placeholder="Owner"
+              className="bg-transparent text-xs text-white/60 outline-none placeholder-white/20 w-20"
+            />
+          </div>
+
+          {/* Deadline */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-card border border-surface-border rounded-xl">
+            <span className="text-white/25 text-xs">📅</span>
+            <input
+              value={project.deadline ?? ''}
+              onChange={(e) => updateProject({ ...project, deadline: e.target.value })}
+              placeholder="Deadline"
+              className="bg-transparent text-xs outline-none placeholder-white/20 w-24"
+              style={{ color: deadlineColor(project.deadline) }}
+            />
+          </div>
+
           {/* Last updated */}
           <span className="text-white/20 text-xs ml-auto">
             Updated {formatDate(project.updatedAt)}
@@ -351,4 +374,17 @@ function formatDate(iso: string): string {
   } catch {
     return ''
   }
+}
+
+const TODAY_ISO = new Date().toISOString().slice(0, 10)
+
+function deadlineColor(deadline?: string): string {
+  if (!deadline) return 'rgba(255,255,255,0.6)'
+  const parsed = new Date(deadline)
+  if (isNaN(parsed.getTime())) return 'rgba(255,255,255,0.6)'
+  const iso = parsed.toISOString().slice(0, 10)
+  if (iso < TODAY_ISO) return '#f87171' // overdue
+  const sevenDays = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
+  if (iso <= sevenDays) return '#fbbf24' // due soon
+  return 'rgba(255,255,255,0.6)'
 }

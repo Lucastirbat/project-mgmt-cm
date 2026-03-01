@@ -7,6 +7,19 @@ interface Props {
   onChange: (updated: Block) => void
 }
 
+const TODAY = new Date().toISOString().slice(0, 10)
+
+function dueDateColor(dueDate: string | undefined, done: boolean): string {
+  if (!dueDate || done) return 'rgba(255,255,255,0.35)'
+  const parsed = new Date(dueDate)
+  if (isNaN(parsed.getTime())) return 'rgba(255,255,255,0.35)'
+  const iso = parsed.toISOString().slice(0, 10)
+  if (iso < TODAY) return '#f87171' // overdue
+  const sevenDays = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
+  if (iso <= sevenDays) return '#fbbf24' // due soon
+  return 'rgba(255,255,255,0.35)'
+}
+
 export default function TaskBlock({ block, color, onChange }: Props) {
   const tasks = block.tasks ?? []
   const inputRef = useRef<HTMLButtonElement>(null)
@@ -22,6 +35,13 @@ export default function TaskBlock({ block, color, onChange }: Props) {
     onChange({
       ...block,
       tasks: tasks.map((t) => (t.id === id ? { ...t, text } : t)),
+    })
+  }
+
+  function updateTaskField(id: string, field: keyof TaskItem, value: string) {
+    onChange({
+      ...block,
+      tasks: tasks.map((t) => (t.id === id ? { ...t, [field]: value } : t)),
     })
   }
 
@@ -72,44 +92,78 @@ export default function TaskBlock({ block, color, onChange }: Props) {
         </div>
       )}
 
-      {tasks.map((task) => (
-        <div key={task.id} className="flex items-start gap-2.5 group/task py-0.5">
-          <button
-            onClick={() => toggleTask(task.id)}
-            className="mt-0.5 w-4 h-4 rounded shrink-0 border transition-all flex items-center justify-center"
-            style={{
-              borderColor: task.done ? color : '#3a3a3a',
-              backgroundColor: task.done ? `${color}20` : 'transparent',
-            }}
-          >
-            {task.done && (
-              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </button>
-          <input
-            data-task-input={block.id}
-            value={task.text}
-            onChange={(e) => updateTaskText(task.id, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(e, task)}
-            placeholder="Task…"
-            className={[
-              'flex-1 bg-transparent text-sm outline-none placeholder-white/15',
-              'border-b border-transparent focus:border-white/10 transition-colors py-0.5',
-              task.done ? 'text-white/25 line-through' : 'text-white/70',
-            ].join(' ')}
-          />
-          <button
-            onClick={() => deleteTask(task.id)}
-            className="opacity-0 group-hover/task:opacity-100 transition-opacity mt-0.5 text-white/20 hover:text-white/50"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      ))}
+      {tasks.map((task) => {
+        const hasMetadata = !!(task.assignee || task.dueDate)
+        return (
+          <div key={task.id} className="group/task">
+            {/* Main row */}
+            <div className="flex items-start gap-2.5 py-0.5">
+              <button
+                onClick={() => toggleTask(task.id)}
+                className="mt-0.5 w-4 h-4 rounded shrink-0 border transition-all flex items-center justify-center"
+                style={{
+                  borderColor: task.done ? color : '#3a3a3a',
+                  backgroundColor: task.done ? `${color}20` : 'transparent',
+                }}
+              >
+                {task.done && (
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+              <input
+                data-task-input={block.id}
+                value={task.text}
+                onChange={(e) => updateTaskText(task.id, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, task)}
+                placeholder="Task…"
+                className={[
+                  'flex-1 bg-transparent text-sm outline-none placeholder-white/15',
+                  'border-b border-transparent focus:border-white/10 transition-colors py-0.5',
+                  task.done ? 'text-white/25 line-through' : 'text-white/70',
+                ].join(' ')}
+              />
+              <button
+                onClick={() => deleteTask(task.id)}
+                className="opacity-0 group-hover/task:opacity-100 transition-opacity mt-0.5 text-white/20 hover:text-white/50"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Metadata sub-row — always visible when data is set, hover-only otherwise */}
+            <div
+              className={[
+                'flex items-center gap-4 pl-6 pb-0.5 transition-opacity',
+                hasMetadata ? 'opacity-100' : 'opacity-0 group-hover/task:opacity-100',
+              ].join(' ')}
+            >
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-white/20">👤</span>
+                <input
+                  value={task.assignee ?? ''}
+                  onChange={(e) => updateTaskField(task.id, 'assignee', e.target.value)}
+                  placeholder="Assignee"
+                  className="bg-transparent text-[11px] text-white/40 outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors w-20"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-white/20">📅</span>
+                <input
+                  value={task.dueDate ?? ''}
+                  onChange={(e) => updateTaskField(task.id, 'dueDate', e.target.value)}
+                  placeholder="Due date"
+                  className="bg-transparent text-[11px] outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors w-24"
+                  style={{ color: dueDateColor(task.dueDate, task.done) }}
+                />
+              </div>
+            </div>
+          </div>
+        )
+      })}
 
       <button
         ref={inputRef}

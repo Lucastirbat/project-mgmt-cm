@@ -4,6 +4,8 @@ export interface TaskItem {
   id: string
   text: string
   done: boolean
+  assignee?: string
+  dueDate?: string
 }
 
 export interface LinkItem {
@@ -108,6 +110,8 @@ export interface Project {
   description: string
   blocks: Block[]
   updatedAt: string
+  owner?: string
+  deadline?: string
 }
 
 // ——— Company ————————————————————————————————————————————————————————————————
