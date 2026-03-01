@@ -37,12 +37,21 @@ function deadlineColor(deadline?: string): string {
   return 'rgba(255,255,255,0.45)'
 }
 
+// Consistent color per person name
+const MEMBER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899']
+function memberColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff
+  return MEMBER_COLORS[hash % MEMBER_COLORS.length]
+}
+
 type SortMode = 'company' | 'priority' | 'status'
 
 export default function Overview() {
   const { data, updateData } = useData()
   const [showDropdown, setShowDropdown] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('status')
+  const [selectedMember, setSelectedMember] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown on outside click
@@ -63,14 +72,7 @@ export default function Overview() {
       status: 'planning',
       priority: 'medium',
       description: 'Add a description\u2026',
-      blocks: [
-        {
-          id: `b-${Date.now()}`,
-          type: 'tasks',
-          title: 'Tasks',
-          tasks: [],
-        },
-      ],
+      blocks: [{ id: `b-${Date.now()}`, type: 'tasks', title: 'Tasks', tasks: [] }],
       updatedAt: new Date().toISOString(),
     }
     const next: AppData = {
@@ -83,25 +85,42 @@ export default function Overview() {
     setShowDropdown(false)
   }
 
-  // Flatten all projects with their parent company info
+  // Flatten all projects
   const allProjects = data.companies.flatMap((company) =>
     company.projects.map((project) => ({
       project,
-      company: {
-        id: company.id,
-        name: company.name,
-        color: company.color,
-        emoji: company.emoji,
-        logoUrl: company.logoUrl,
-      },
+      company: { id: company.id, name: company.name, color: company.color, emoji: company.emoji, logoUrl: company.logoUrl },
     }))
   )
+
+  // Build team member list from all owners + assignees
+  const teamMembers = (() => {
+    const nameMap = new Map<string, { projects: Set<string>; taskCount: number }>()
+    for (const { project } of allProjects) {
+      const owner = project.owner?.trim()
+      if (owner) {
+        if (!nameMap.has(owner)) nameMap.set(owner, { projects: new Set(), taskCount: 0 })
+        nameMap.get(owner)!.projects.add(project.id)
+      }
+      for (const block of project.blocks) {
+        for (const task of block.tasks ?? []) {
+          const assignee = task.assignee?.trim()
+          if (assignee) {
+            if (!nameMap.has(assignee)) nameMap.set(assignee, { projects: new Set(), taskCount: 0 })
+            nameMap.get(assignee)!.projects.add(project.id)
+            nameMap.get(assignee)!.taskCount++
+          }
+        }
+      }
+    }
+    return Array.from(nameMap.entries())
+      .map(([name, { projects, taskCount }]) => ({ name, projectCount: projects.size, taskCount }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  })()
 
   // Sort orders
   const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
   const statusOrder: Record<string, number> = { active: 0, planning: 1, paused: 2, done: 3 }
-
-  // Build a company order map based on data.companies array order
   const companyOrder: Record<string, number> = {}
   data.companies.forEach((c, i) => { companyOrder[c.id] = i })
 
@@ -110,13 +129,11 @@ export default function Overview() {
       const ca = companyOrder[a.company.id] ?? 99
       const cb = companyOrder[b.company.id] ?? 99
       if (ca !== cb) return ca - cb
-      // Within same company, sort by priority then name
       const pa = priorityOrder[a.project.priority] ?? 9
       const pb = priorityOrder[b.project.priority] ?? 9
       if (pa !== pb) return pa - pb
       return a.project.name.localeCompare(b.project.name)
     }
-
     if (sortMode === 'priority') {
       const pa = priorityOrder[a.project.priority] ?? 9
       const pb = priorityOrder[b.project.priority] ?? 9
@@ -126,8 +143,6 @@ export default function Overview() {
       if (sa !== sb) return sa - sb
       return a.project.name.localeCompare(b.project.name)
     }
-
-    // Default: status
     const sa = statusOrder[a.project.status] ?? 9
     const sb = statusOrder[b.project.status] ?? 9
     if (sa !== sb) return sa - sb
@@ -137,10 +152,18 @@ export default function Overview() {
     return a.project.name.localeCompare(b.project.name)
   })
 
-  // Count tasks
+  // Filter by selected member
+  const visibleProjects = selectedMember
+    ? allProjects.filter(({ project }) => {
+        if (project.owner?.trim() === selectedMember) return true
+        return project.blocks.some((b) =>
+          b.tasks?.some((t) => t.assignee?.trim() === selectedMember)
+        )
+      })
+    : allProjects
+
   function getTaskStats(project: Project) {
-    let total = 0
-    let done = 0
+    let total = 0, done = 0
     for (const block of project.blocks) {
       if (block.tasks) {
         total += block.tasks.length
@@ -150,22 +173,18 @@ export default function Overview() {
     return { total, done }
   }
 
-  // Get preview tasks: incomplete first, then completed, up to MAX_TASK_PREVIEW
-  function getPreviewTasks(project: Project): { tasks: TaskItem[]; remaining: number } {
+  // When member is selected, show only their tasks in the preview
+  function getPreviewTasks(project: Project, assigneeFilter?: string): { tasks: TaskItem[]; remaining: number } {
     const allTasks: TaskItem[] = []
     for (const block of project.blocks) {
-      if (block.tasks) {
-        allTasks.push(...block.tasks)
-      }
+      if (block.tasks) allTasks.push(...block.tasks)
     }
-    // Sort: incomplete first, then completed
-    const sorted = [
-      ...allTasks.filter((t) => !t.done),
-      ...allTasks.filter((t) => t.done),
-    ]
+    const relevant = assigneeFilter
+      ? allTasks.filter((t) => t.assignee?.trim() === assigneeFilter)
+      : allTasks
+    const sorted = [...relevant.filter((t) => !t.done), ...relevant.filter((t) => t.done)]
     const preview = sorted.slice(0, MAX_TASK_PREVIEW)
-    const remaining = sorted.length - preview.length
-    return { tasks: preview, remaining }
+    return { tasks: preview, remaining: sorted.length - preview.length }
   }
 
   const sortButtons: { mode: SortMode; label: string; icon: JSX.Element }[] = [
@@ -199,12 +218,17 @@ export default function Overview() {
   ]
 
   return (
-    <div className="p-8 max-w-6xl mx-auto animate-fade-in">
+    <div className="p-8 max-w-7xl mx-auto animate-fade-in">
+      {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Overview</h1>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">
+            {selectedMember ? `${selectedMember}'s work` : 'Overview'}
+          </h1>
           <p className="text-white/60 text-sm mt-1">
-            {allProjects.length} projects across {data.companies.length} companies
+            {selectedMember
+              ? `${visibleProjects.length} project${visibleProjects.length !== 1 ? 's' : ''} · click name again to clear`
+              : `${allProjects.length} projects across ${data.companies.length} companies`}
           </p>
         </div>
 
@@ -219,7 +243,6 @@ export default function Overview() {
             </svg>
             Add Project
           </button>
-
           {showDropdown && (
             <div className="absolute right-0 top-full mt-2 w-56 bg-surface-card border border-surface-border rounded-xl shadow-xl z-50 py-1 overflow-hidden">
               <p className="text-white/50 text-[10px] uppercase tracking-wider font-medium px-3 py-2">Select company</p>
@@ -235,9 +258,7 @@ export default function Overview() {
                   >
                     {company.logoUrl ? (
                       <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
-                    ) : (
-                      company.emoji
-                    )}
+                    ) : company.emoji}
                   </div>
                   <span className="text-white/80 text-sm">{company.name}</span>
                 </button>
@@ -247,185 +268,197 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* Sort buttons */}
-      <div className="flex items-center gap-2 mb-5">
-        <span className="text-white/40 text-xs font-medium mr-1">Sort by</span>
-        {sortButtons.map(({ mode, label, icon }) => (
-          <button
-            key={mode}
-            onClick={() => setSortMode(mode)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-              sortMode === mode
-                ? 'bg-white/10 text-white border-white/20'
-                : 'bg-white/[0.03] text-white/50 border-surface-border hover:bg-white/[0.06] hover:text-white/70'
-            }`}
-          >
-            {icon}
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Projects grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {allProjects.map(({ project, company }) => {
-          const { total, done } = getTaskStats(project)
-          const { tasks: previewTasks, remaining } = getPreviewTasks(project)
-          const ps = priorityStyle[project.priority] ?? priorityStyle.low
-          const sc = statusColor[project.status] ?? '#6b7280'
-          const sl = statusLabel[project.status] ?? project.status
-
-          return (
-            <Link
-              key={project.id}
-              to={`/${company.id}/${project.id}`}
-              className="block border border-surface-border rounded-2xl p-5 hover:border-white/20 transition-all hover:bg-white/[0.02] group"
-            >
-              {/* Company badge */}
-              <div className="flex items-center gap-2 mb-3">
-                <div
-                  className="w-5 h-5 rounded-md flex items-center justify-center text-xs overflow-hidden shrink-0"
-                  style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
-                >
-                  {company.logoUrl ? (
-                    <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
-                  ) : (
-                    company.emoji
-                  )}
-                </div>
-                <span className="text-white/50 text-xs truncate">{company.name}</span>
-              </div>
-
-              {/* Project name */}
-              <h3 className="text-white font-medium text-sm mb-1 group-hover:text-white/90 transition-colors">
-                {project.name}
-              </h3>
-
-              {/* Description */}
-              {project.description && project.description !== 'Add a description\u2026' && (
-                <p className="text-white/50 text-xs line-clamp-2 mb-3">{project.description}</p>
-              )}
-
-              {/* Status + Priority + Tasks */}
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                {/* Status pill */}
-                <span className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: `${sc}18`, color: sc }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc }} />
-                  {sl}
-                </span>
-
-                {/* Priority pill */}
-                <span
-                  className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: ps.bg, color: ps.text }}
-                >
-                  {project.priority}
-                </span>
-
-                {/* Owner */}
-                {project.owner && (
-                  <span className="text-[10px] text-white/45 flex items-center gap-1">
-                    <span>👤</span>
-                    {project.owner}
-                  </span>
-                )}
-
-                {/* Deadline */}
-                {project.deadline && (
-                  <span
-                    className="text-[10px] flex items-center gap-1"
-                    style={{ color: deadlineColor(project.deadline) }}
-                  >
-                    <span>📅</span>
-                    {project.deadline}
-                  </span>
-                )}
-
-                {/* Task count */}
-                {total > 0 && (
-                  <span className="text-white/50 text-[10px] ml-auto">
-                    {done}/{total} tasks
-                  </span>
-                )}
-              </div>
-
-              {/* Task progress bar */}
-              {total > 0 && (
-                <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.round((done / total) * 100)}%`,
-                      backgroundColor: company.color,
-                      opacity: 0.6,
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Task preview list */}
-              {previewTasks.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
-                  {previewTasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-2">
-                      <div
-                        className="w-3.5 h-3.5 rounded border flex-shrink-0 mt-[1px] flex items-center justify-center"
-                        style={{
-                          borderColor: task.done ? `${company.color}60` : 'rgba(255,255,255,0.15)',
-                          backgroundColor: task.done ? `${company.color}20` : 'transparent',
-                        }}
-                      >
-                        {task.done && (
-                          <svg className="w-2.5 h-2.5" fill="none" stroke={company.color} viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <span
-                        className={`text-[11px] leading-tight ${
-                          task.done ? 'text-white/25 line-through' : 'text-white/55'
-                        }`}
-                      >
-                        {task.text || 'Untitled task'}
-                      </span>
-                    </div>
-                  ))}
-                  {remaining > 0 && (
-                    <p className="text-white/25 text-[10px] pl-5.5">+{remaining} more</p>
-                  )}
-                </div>
-              )}
-            </Link>
-          )
-        })}
-      </div>
-
-      {/* Social media strip */}
-      <div className="border border-surface-border rounded-2xl p-5 flex items-center justify-between hover:border-white/20 transition-colors group">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center">
-            <svg className="w-4 h-4 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
+      {/* Main layout: projects + team panel */}
+      <div className="flex gap-8 items-start">
+        {/* Left: sort + project grid */}
+        <div className="flex-1 min-w-0">
+          {/* Sort buttons */}
+          <div className="flex items-center gap-2 mb-5">
+            <span className="text-white/40 text-xs font-medium mr-1">Sort by</span>
+            {sortButtons.map(({ mode, label, icon }) => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  sortMode === mode
+                    ? 'bg-white/10 text-white border-white/20'
+                    : 'bg-white/[0.03] text-white/50 border-surface-border hover:bg-white/[0.06] hover:text-white/70'
+                }`}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
           </div>
-          <div>
-            <p className="text-white text-sm font-medium">Social Media</p>
-            <p className="text-white/55 text-xs">
-              {data.socialMedia.managerName} \u00b7 {data.socialMedia.platforms.length} platforms across {data.companies.length} companies
-            </p>
+
+          {/* Projects grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {visibleProjects.map(({ project, company }) => {
+              const { total, done } = getTaskStats(project)
+              const { tasks: previewTasks, remaining } = getPreviewTasks(project, selectedMember ?? undefined)
+              const ps = priorityStyle[project.priority] ?? priorityStyle.low
+              const sc = statusColor[project.status] ?? '#6b7280'
+              const sl = statusLabel[project.status] ?? project.status
+
+              return (
+                <Link
+                  key={project.id}
+                  to={`/${company.id}/${project.id}`}
+                  className="block border border-surface-border rounded-2xl p-5 hover:border-white/20 transition-all hover:bg-white/[0.02] group"
+                >
+                  {/* Company badge */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-xs overflow-hidden shrink-0"
+                      style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
+                    >
+                      {company.logoUrl ? (
+                        <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                      ) : company.emoji}
+                    </div>
+                    <span className="text-white/50 text-xs truncate">{company.name}</span>
+                  </div>
+
+                  {/* Project name */}
+                  <h3 className="text-white font-medium text-sm mb-1 group-hover:text-white/90 transition-colors">
+                    {project.name}
+                  </h3>
+
+                  {/* Description */}
+                  {project.description && project.description !== 'Add a description\u2026' && (
+                    <p className="text-white/50 text-xs line-clamp-2 mb-3">{project.description}</p>
+                  )}
+
+                  {/* Status + Priority + owner + deadline */}
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <span
+                      className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: `${sc}18`, color: sc }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc }} />
+                      {sl}
+                    </span>
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: ps.bg, color: ps.text }}
+                    >
+                      {project.priority}
+                    </span>
+                    {project.owner && (
+                      <span className="text-[10px] text-white/45 flex items-center gap-1">
+                        <span>👤</span>{project.owner}
+                      </span>
+                    )}
+                    {project.deadline && (
+                      <span className="text-[10px] flex items-center gap-1" style={{ color: deadlineColor(project.deadline) }}>
+                        <span>📅</span>{project.deadline}
+                      </span>
+                    )}
+                    {total > 0 && (
+                      <span className="text-white/50 text-[10px] ml-auto">{done}/{total} tasks</span>
+                    )}
+                  </div>
+
+                  {/* Task progress bar */}
+                  {total > 0 && (
+                    <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.round((done / total) * 100)}%`, backgroundColor: company.color, opacity: 0.6 }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Task preview — filtered to member's tasks when a member is selected */}
+                  {previewTasks.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                      {previewTasks.map((task) => (
+                        <div key={task.id} className="flex items-start gap-2">
+                          <div
+                            className="w-3.5 h-3.5 rounded border flex-shrink-0 mt-[1px] flex items-center justify-center"
+                            style={{
+                              borderColor: task.done ? `${company.color}60` : 'rgba(255,255,255,0.15)',
+                              backgroundColor: task.done ? `${company.color}20` : 'transparent',
+                            }}
+                          >
+                            {task.done && (
+                              <svg className="w-2.5 h-2.5" fill="none" stroke={company.color} viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className={`text-[11px] leading-tight ${task.done ? 'text-white/25 line-through' : 'text-white/55'}`}>
+                              {task.text || 'Untitled task'}
+                            </span>
+                            {task.dueDate && !task.done && (
+                              <span className="ml-2 text-[10px]" style={{ color: deadlineColor(task.dueDate) }}>
+                                {task.dueDate}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {remaining > 0 && (
+                        <p className="text-white/25 text-[10px] pl-5.5">+{remaining} more</p>
+                      )}
+                    </div>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </div>
-        <Link
-          to="/social-media"
-          className="text-white/50 hover:text-white/80 text-sm transition-colors flex items-center gap-1"
-        >
-          View
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </Link>
+
+        {/* Right: Team panel */}
+        <div className="w-52 shrink-0 sticky top-8">
+          <h2 className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-3">Team</h2>
+
+          {teamMembers.length === 0 ? (
+            <p className="text-white/20 text-xs leading-relaxed">
+              Set owners on projects or assignees on tasks to see your team here.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {teamMembers.map(({ name, projectCount, taskCount }) => {
+                const color = memberColor(name)
+                const isSelected = selectedMember === name
+                return (
+                  <button
+                    key={name}
+                    onClick={() => setSelectedMember(isSelected ? null : name)}
+                    className={[
+                      'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all',
+                      isSelected
+                        ? 'bg-white/10 text-white'
+                        : 'text-white/60 hover:bg-white/5 hover:text-white/80',
+                    ].join(' ')}
+                  >
+                    {/* Avatar */}
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0"
+                      style={{ backgroundColor: `${color}25`, color }}
+                    >
+                      {name[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{name}</div>
+                      <div className="text-[10px] text-white/30 mt-0.5">
+                        {projectCount} project{projectCount !== 1 ? 's' : ''}
+                        {taskCount > 0 && ` · ${taskCount} task${taskCount !== 1 ? 's' : ''}`}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
