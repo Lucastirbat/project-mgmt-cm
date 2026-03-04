@@ -55,4 +55,23 @@
     background-color: #2a2a2a;
     border-radius: 3px;
   }
+
+  /* ToDo kanban horizontal scroll */
+  .todo-kanban-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2a transparent;
+  }
+
+  .todo-kanban-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .todo-kanban-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .todo-kanban-scroll::-webkit-scrollbar-thumb {
+    background-color: #2a2a2a;
+    border-radius: 3px;
+  }
 }

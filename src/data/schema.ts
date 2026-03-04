@@ -1,4 +1,4 @@
-// ——— Block types ————————————————————————————————————————————————————————————
+// ——— Block types ————————————————————————————————————————————————
 
 export interface TaskItem {
   id: string
@@ -30,7 +30,7 @@ export interface ProfileItem {
   phone?: string
 }
 
-// ——— Travel Map ——————————————————————————————————————————————————————————————
+// ——— Travel Map ————————————————————————————————————————————————————
 
 export interface TripContact {
   id: string
@@ -97,7 +97,7 @@ export interface Block {
   tripStops?: TripStop[]
 }
 
-// ——— Project ————————————————————————————————————————————————————————————————
+// ——— Project ————————————————————————————————————————————————————————
 
 export type ProjectStatus = 'active' | 'paused' | 'planning' | 'done'
 export type ProjectPriority = 'high' | 'medium' | 'low'
@@ -114,7 +114,7 @@ export interface Project {
   deadline?: string
 }
 
-// ——— Company ————————————————————————————————————————————————————————————————
+// ——— Company ————————————————————————————————————————————————————————
 
 export interface Company {
   id: string
@@ -126,7 +126,7 @@ export interface Company {
   projects: Project[]
 }
 
-// ——— Social Media ———————————————————————————————————————————————————————————
+// ——— Social Media ———————————————————————————————————————————————————
 
 export interface SocialPlatform {
   id: string
@@ -142,9 +142,16 @@ export interface SocialMediaData {
   platforms: SocialPlatform[]
 }
 
-// ——— Root data ——————————————————————————————————————————————————————————————
+// ——— Root data ——————————————————————————————————————————————————————
+
+// Maps project ID → team member name for the "ToDo" kanban board.
+// Projects not in this map appear in the "Unassigned" column.
+export interface TodoAssignments {
+  [projectId: string]: string
+}
 
 export interface AppData {
   companies: Company[]
   socialMedia: SocialMediaData
+  todoAssignments?: TodoAssignments
 }

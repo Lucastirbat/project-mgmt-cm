@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useData } from '../context/DataContext'
 import type { Project, AppData, TaskItem } from '../data/schema'
@@ -37,7 +37,14 @@ function deadlineColor(deadline?: string): string {
   return 'rgba(255,255,255,0.45)'
 }
 
-type SortMode = 'company' | 'priority' | 'status'
+const MEMBER_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899']
+function memberColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff
+  return MEMBER_COLORS[hash % MEMBER_COLORS.length]
+}
+
+type SortMode = 'company' | 'priority' | 'status' | 'todo'
 
 export default function Overview() {
   const { data, updateData } = useData()
@@ -45,6 +52,10 @@ export default function Overview() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('status')
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Drag-and-drop state for ToDo board
+  const [dragProjectId, setDragProjectId] = useState<string | null>(null)
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
 
   // Member filter comes from URL: /?member=Luca
   const selectedMember = searchParams.get('member')
@@ -113,6 +124,7 @@ export default function Overview() {
       if (sa !== sb) return sa - sb
       return a.project.name.localeCompare(b.project.name)
     }
+    // Default: status sort (also used for 'todo' card ordering within columns)
     const sa = statusOrder[a.project.status] ?? 9
     const sb = statusOrder[b.project.status] ?? 9
     if (sa !== sb) return sa - sb
@@ -131,6 +143,73 @@ export default function Overview() {
         )
       })
     : allProjects
+
+  // Collect unique team members from owners + assignees across all data
+  const teamMembers = (() => {
+    const names = new Set<string>()
+    for (const company of data.companies) {
+      for (const project of company.projects) {
+        if (project.owner?.trim()) names.add(project.owner.trim())
+        for (const block of project.blocks) {
+          for (const task of block.tasks ?? []) {
+            if (task.assignee?.trim()) names.add(task.assignee.trim())
+          }
+        }
+      }
+    }
+    return Array.from(names).sort()
+  })()
+
+  const todoAssignments = data.todoAssignments ?? {}
+
+  // Build columns for ToDo board: "Unassigned" + each team member
+  const todoColumns = ['__unassigned__', ...teamMembers]
+
+  function getColumnProjects(column: string) {
+    return visibleProjects.filter(({ project }) => {
+      const assigned = todoAssignments[project.id]
+      if (column === '__unassigned__') {
+        return !assigned || !teamMembers.includes(assigned)
+      }
+      return assigned === column
+    })
+  }
+
+  // Drag-and-drop handlers
+  const handleDragStart = useCallback((projectId: string) => {
+    setDragProjectId(projectId)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, column: string) => {
+    e.preventDefault()
+    setDragOverColumn(column)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverColumn(null)
+  }, [])
+
+  const handleDrop = useCallback((column: string) => {
+    if (!dragProjectId) return
+    const newAssignments = { ...todoAssignments }
+    if (column === '__unassigned__') {
+      delete newAssignments[dragProjectId]
+    } else {
+      newAssignments[dragProjectId] = column
+    }
+    const next: AppData = {
+      ...data,
+      todoAssignments: newAssignments,
+    }
+    updateData(next)
+    setDragProjectId(null)
+    setDragOverColumn(null)
+  }, [dragProjectId, todoAssignments, data, updateData])
+
+  const handleDragEnd = useCallback(() => {
+    setDragProjectId(null)
+    setDragOverColumn(null)
+  }, [])
 
   function getTaskStats(project: Project) {
     let total = 0, done = 0
@@ -185,10 +264,150 @@ export default function Overview() {
         </svg>
       ),
     },
+    {
+      mode: 'todo',
+      label: 'ToDo',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+        </svg>
+      ),
+    },
   ]
 
+  // ——— Project card renderer (shared between grid + kanban) ———
+  function renderProjectCard(
+    project: Project,
+    company: { id: string; name: string; color: string; emoji: string; logoUrl?: string },
+    opts?: { draggable?: boolean; compact?: boolean }
+  ) {
+    const { total, done } = getTaskStats(project)
+    const { tasks: previewTasks, remaining } = getPreviewTasks(project, selectedMember ?? undefined)
+    const ps = priorityStyle[project.priority] ?? priorityStyle.low
+    const sc = statusColor[project.status] ?? '#6b7280'
+    const sl = statusLabel[project.status] ?? project.status
+    const isDragging = dragProjectId === project.id
+
+    return (
+      <Link
+        key={project.id}
+        to={`/${company.id}/${project.id}`}
+        draggable={opts?.draggable}
+        onDragStart={(e) => {
+          if (opts?.draggable) {
+            e.dataTransfer.effectAllowed = 'move'
+            handleDragStart(project.id)
+          }
+        }}
+        onDragEnd={handleDragEnd}
+        className={`block border border-surface-border rounded-2xl p-4 hover:border-white/20 transition-all hover:bg-white/[0.02] group ${
+          isDragging ? 'opacity-40 scale-[0.97]' : ''
+        } ${opts?.draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      >
+        {/* Company badge */}
+        <div className="flex items-center gap-2 mb-2">
+          <div
+            className="w-5 h-5 rounded-md flex items-center justify-center text-xs overflow-hidden shrink-0"
+            style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
+          >
+            {company.logoUrl ? (
+              <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+            ) : company.emoji}
+          </div>
+          <span className="text-white/50 text-xs truncate">{company.name}</span>
+        </div>
+
+        {/* Project name */}
+        <h3 className="text-white font-medium text-sm mb-1 group-hover:text-white/90 transition-colors">
+          {project.name}
+        </h3>
+
+        {/* Description */}
+        {!opts?.compact && project.description && project.description !== 'Add a description\u2026' && (
+          <p className="text-white/50 text-xs line-clamp-2 mb-2">{project.description}</p>
+        )}
+
+        {/* Status + Priority + owner + deadline */}
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <span
+            className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: `${sc}18`, color: sc }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc }} />
+            {sl}
+          </span>
+          <span
+            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: ps.bg, color: ps.text }}
+          >
+            {project.priority}
+          </span>
+          {project.owner && (
+            <span className="text-[10px] text-white/45 flex items-center gap-1">
+              <span>👤</span>{project.owner}
+            </span>
+          )}
+          {project.deadline && (
+            <span className="text-[10px] flex items-center gap-1" style={{ color: deadlineColor(project.deadline) }}>
+              <span>📅</span>{project.deadline}
+            </span>
+          )}
+          {total > 0 && (
+            <span className="text-white/50 text-[10px] ml-auto">{done}/{total} tasks</span>
+          )}
+        </div>
+
+        {/* Task progress bar */}
+        {total > 0 && (
+          <div className="mt-2 h-1 rounded-full bg-white/5 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${Math.round((done / total) * 100)}%`, backgroundColor: company.color, opacity: 0.6 }}
+            />
+          </div>
+        )}
+
+        {/* Task preview */}
+        {!opts?.compact && previewTasks.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5">
+            {previewTasks.map((task) => (
+              <div key={task.id} className="flex items-start gap-2">
+                <div
+                  className="w-3.5 h-3.5 rounded border flex-shrink-0 mt-[1px] flex items-center justify-center"
+                  style={{
+                    borderColor: task.done ? `${company.color}60` : 'rgba(255,255,255,0.15)',
+                    backgroundColor: task.done ? `${company.color}20` : 'transparent',
+                  }}
+                >
+                  {task.done && (
+                    <svg className="w-2.5 h-2.5" fill="none" stroke={company.color} viewBox="0 0 24 24" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className={`text-[11px] leading-tight ${task.done ? 'text-white/25 line-through' : 'text-white/55'}`}>
+                    {task.text || 'Untitled task'}
+                  </span>
+                  {task.dueDate && !task.done && (
+                    <span className="ml-2 text-[10px]" style={{ color: deadlineColor(task.dueDate) }}>
+                      {task.dueDate}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {remaining > 0 && (
+              <p className="text-white/25 text-[10px] pl-5.5">+{remaining} more</p>
+            )}
+          </div>
+        )}
+      </Link>
+    )
+  }
+
   return (
-    <div className="p-8 max-w-6xl mx-auto animate-fade-in">
+    <div className="p-8 max-w-full mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
@@ -257,123 +476,63 @@ export default function Overview() {
         ))}
       </div>
 
-      {/* Projects grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {visibleProjects.map(({ project, company }) => {
-          const { total, done } = getTaskStats(project)
-          const { tasks: previewTasks, remaining } = getPreviewTasks(project, selectedMember ?? undefined)
-          const ps = priorityStyle[project.priority] ?? priorityStyle.low
-          const sc = statusColor[project.status] ?? '#6b7280'
-          const sl = statusLabel[project.status] ?? project.status
+      {/* ToDo Kanban Board */}
+      {sortMode === 'todo' ? (
+        <div className="todo-kanban-scroll flex gap-4 overflow-x-auto pb-4">
+          {todoColumns.map((column) => {
+            const columnProjects = getColumnProjects(column)
+            const isUnassigned = column === '__unassigned__'
+            const colLabel = isUnassigned ? 'Unassigned' : column
+            const colColor = isUnassigned ? '#6b7280' : memberColor(column)
+            const isOver = dragOverColumn === column && dragProjectId !== null
 
-          return (
-            <Link
-              key={project.id}
-              to={`/${company.id}/${project.id}`}
-              className="block border border-surface-border rounded-2xl p-5 hover:border-white/20 transition-all hover:bg-white/[0.02] group"
-            >
-              {/* Company badge */}
-              <div className="flex items-center gap-2 mb-3">
-                <div
-                  className="w-5 h-5 rounded-md flex items-center justify-center text-xs overflow-hidden shrink-0"
-                  style={{ backgroundColor: `${company.color}20`, border: `1px solid ${company.color}30` }}
-                >
-                  {company.logoUrl ? (
-                    <img src={company.logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
-                  ) : company.emoji}
-                </div>
-                <span className="text-white/50 text-xs truncate">{company.name}</span>
-              </div>
-
-              {/* Project name */}
-              <h3 className="text-white font-medium text-sm mb-1 group-hover:text-white/90 transition-colors">
-                {project.name}
-              </h3>
-
-              {/* Description */}
-              {project.description && project.description !== 'Add a description\u2026' && (
-                <p className="text-white/50 text-xs line-clamp-2 mb-3">{project.description}</p>
-              )}
-
-              {/* Status + Priority + owner + deadline */}
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <span
-                  className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: `${sc}18`, color: sc }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc }} />
-                  {sl}
-                </span>
-                <span
-                  className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: ps.bg, color: ps.text }}
-                >
-                  {project.priority}
-                </span>
-                {project.owner && (
-                  <span className="text-[10px] text-white/45 flex items-center gap-1">
-                    <span>👤</span>{project.owner}
-                  </span>
-                )}
-                {project.deadline && (
-                  <span className="text-[10px] flex items-center gap-1" style={{ color: deadlineColor(project.deadline) }}>
-                    <span>📅</span>{project.deadline}
-                  </span>
-                )}
-                {total > 0 && (
-                  <span className="text-white/50 text-[10px] ml-auto">{done}/{total} tasks</span>
-                )}
-              </div>
-
-              {/* Task progress bar */}
-              {total > 0 && (
-                <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
+            return (
+              <div
+                key={column}
+                className={`flex-shrink-0 w-72 rounded-xl border transition-colors ${
+                  isOver
+                    ? 'border-white/30 bg-white/[0.04]'
+                    : 'border-surface-border bg-white/[0.01]'
+                }`}
+                onDragOver={(e) => handleDragOver(e, column)}
+                onDragLeave={handleDragLeave}
+                onDrop={() => handleDrop(column)}
+              >
+                {/* Column header */}
+                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-surface-border">
                   <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${Math.round((done / total) * 100)}%`, backgroundColor: company.color, opacity: 0.6 }}
-                  />
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{ backgroundColor: `${colColor}25`, color: colColor }}
+                  >
+                    {isUnassigned ? '?' : column[0].toUpperCase()}
+                  </div>
+                  <span className="text-white/80 text-sm font-medium truncate">{colLabel}</span>
+                  <span className="text-white/30 text-xs ml-auto">{columnProjects.length}</span>
                 </div>
-              )}
 
-              {/* Task preview — filtered to member's tasks when a member is selected */}
-              {previewTasks.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
-                  {previewTasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-2">
-                      <div
-                        className="w-3.5 h-3.5 rounded border flex-shrink-0 mt-[1px] flex items-center justify-center"
-                        style={{
-                          borderColor: task.done ? `${company.color}60` : 'rgba(255,255,255,0.15)',
-                          backgroundColor: task.done ? `${company.color}20` : 'transparent',
-                        }}
-                      >
-                        {task.done && (
-                          <svg className="w-2.5 h-2.5" fill="none" stroke={company.color} viewBox="0 0 24 24" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className={`text-[11px] leading-tight ${task.done ? 'text-white/25 line-through' : 'text-white/55'}`}>
-                          {task.text || 'Untitled task'}
-                        </span>
-                        {task.dueDate && !task.done && (
-                          <span className="ml-2 text-[10px]" style={{ color: deadlineColor(task.dueDate) }}>
-                            {task.dueDate}
-                          </span>
-                        )}
-                      </div>
+                {/* Column body */}
+                <div className="p-2 space-y-2 min-h-[120px]">
+                  {columnProjects.length === 0 && (
+                    <div className="flex items-center justify-center h-20 text-white/15 text-xs">
+                      Drop projects here
                     </div>
-                  ))}
-                  {remaining > 0 && (
-                    <p className="text-white/25 text-[10px] pl-5.5">+{remaining} more</p>
+                  )}
+                  {columnProjects.map(({ project, company }) =>
+                    renderProjectCard(project, company, { draggable: true, compact: true })
                   )}
                 </div>
-              )}
-            </Link>
-          )
-        })}
-      </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        /* Standard grid view */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl">
+          {visibleProjects.map(({ project, company }) =>
+            renderProjectCard(project, company)
+          )}
+        </div>
+      )}
     </div>
   )
 }
