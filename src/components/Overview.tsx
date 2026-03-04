@@ -166,11 +166,16 @@ export default function Overview() {
   const todoColumns = ['__unassigned__', ...teamMembers]
 
   function getColumnProjects(column: string) {
+    // For Unassigned column, always show ALL unassigned projects (not filtered by member)
+    if (column === '__unassigned__') {
+      return allProjects.filter(({ project }) => {
+        const assigned = todoAssignments[project.id]
+        return !assigned || !teamMembers.includes(assigned)
+      })
+    }
+    // For member columns, use visible (filtered) projects
     return visibleProjects.filter(({ project }) => {
       const assigned = todoAssignments[project.id]
-      if (column === '__unassigned__') {
-        return !assigned || !teamMembers.includes(assigned)
-      }
       return assigned === column
     })
   }
@@ -478,7 +483,7 @@ export default function Overview() {
 
       {/* ToDo Kanban Board */}
       {sortMode === 'todo' ? (
-        <div className="todo-kanban-scroll flex gap-4 overflow-x-auto pb-4">
+        <div className="todo-kanban-scroll flex gap-4 overflow-x-auto pb-4 items-start">
           {todoColumns.map((column) => {
             const columnProjects = getColumnProjects(column)
             const isUnassigned = column === '__unassigned__'
@@ -510,7 +515,7 @@ export default function Overview() {
                   <span className="text-white/30 text-xs ml-auto">{columnProjects.length}</span>
                 </div>
 
-                {/* Column body */}
+                {/* Column body — no max height, grows with content */}
                 <div className="p-2 space-y-2 min-h-[120px]">
                   {columnProjects.length === 0 && (
                     <div className="flex items-center justify-center h-20 text-white/15 text-xs">
