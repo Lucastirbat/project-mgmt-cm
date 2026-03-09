@@ -226,7 +226,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', height: 72, flexShrink: 0, backgroundColor: 'rgba(0,0,0,0.35)', borderTop: `1px solid ${ACCENT_BORDER.replace('0.3', '0.1')}`, cursor: 'grab', userSelect: 'none', overflow: 'hidden' }}
+      style={{ position: 'relative', height: 72, flexShrink: 0, backgroundColor: 'rgba(0,0,0,0.35)', borderTop: `1px solid ${ACCENT_BORDER.replace('0.3', '0.1')}`, cursor: 'grab', userSelect: 'none', overflow: 'visible' }}
       onWheel={handleWheel}
       onMouseDown={(e) => { const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }; e.preventDefault() }}
     >
@@ -258,7 +258,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
         const faceSrc = progress < 1/3 ? '/face1.png' : progress < 2/3 ? '/face2.png' : '/face3.png'
         return (
           <div
-            style={{ position: 'absolute', top: 1, left: playheadX - 11, width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 12px ${accent}c0`, zIndex: 10, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
+            style={{ position: 'absolute', top: -34, left: playheadX - 24, width: 48, height: 48, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 14px ${accent}c0`, zIndex: 10, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
             onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
           >
             <img src={faceSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />

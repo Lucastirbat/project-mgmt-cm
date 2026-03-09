@@ -1,0 +1,8 @@
+# Allow the public trip page to be embedded as an iframe on any external site
+/trip
+  X-Frame-Options: ALLOWALL
+  Content-Security-Policy: frame-ancestors *
+
+/trip/friends
+  X-Frame-Options: ALLOWALL
+  Content-Security-Policy: frame-ancestors *
