@@ -448,6 +448,37 @@ export default function TravelMapBlock({ block, onChange }: Props) {
     onChange({ ...block, tripStops: stops.map((s) => (s.id === updated.id ? updated : s)) })
   }
 
+  function addStop() {
+    const lastStop = stops[stops.length - 1]
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const nextDay = new Date(tomorrow)
+    nextDay.setDate(nextDay.getDate() + 3)
+    const arrivalDate = lastStop?.departureDate ?? tomorrow.toISOString().slice(0, 10)
+    const departureDate = new Date(new Date(arrivalDate).getTime() + 3 * 86400000).toISOString().slice(0, 10)
+    const newStop: TripStop = {
+      id: `stop-${uid()}`,
+      country: 'Country',
+      capital: 'City',
+      flag: '🏳️',
+      lat: lastStop ? lastStop.lat + 2 : 48.8566,
+      lng: lastStop ? lastStop.lng + 2 : 2.3522,
+      arrivalDate,
+      departureDate,
+      events: [],
+      contacts: [],
+    }
+    const newStops = [...stops, newStop]
+    onChange({ ...block, tripStops: newStops })
+    setSelectedId(newStop.id)
+  }
+
+  function deleteStop(id: string) {
+    const newStops = stops.filter((s) => s.id !== id)
+    onChange({ ...block, tripStops: newStops })
+    if (selectedId === id) setSelectedId(newStops[0]?.id ?? null)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {/* Live status banner */}
@@ -551,6 +582,15 @@ export default function TravelMapBlock({ block, onChange }: Props) {
                 </CircleMarker>
               )
             })}
+            {/* Venue markers for selected stop's events */}
+            {selectedStop?.events.map((ev) => ev.venueCoords ? (
+              <CircleMarker key={`venue-${ev.id}`} center={ev.venueCoords} radius={6}
+                pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.9, color: '#fff', weight: 1.5 }}>
+                <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>📍 {ev.title}</span>
+                </Tooltip>
+              </CircleMarker>
+            ) : null)}
           </MapContainer>
         )}
 
@@ -564,7 +604,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
               border: '1px solid rgba(255,255,255,0.08)',
             }}
           >
-            <StopDetail stop={selectedStop} onUpdate={updateStop} onClose={() => setSelectedId(null)} />
+            <StopDetail stop={selectedStop} onUpdate={updateStop} onDelete={() => deleteStop(selectedStop.id)} onClose={() => setSelectedId(null)} />
           </div>
         )}
       </div>
@@ -583,13 +623,24 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         />
       )}
 
+      {/* Add stop */}
+      <button
+        onClick={addStop}
+        className="self-start flex items-center gap-1.5 text-xs text-white/30 hover:text-accent transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Add stop
+      </button>
+
     </div>
   )
 }
 
 // ─── Stop Detail Panel ────────────────────────────────────────────────────────
 
-function StopDetail({ stop, onUpdate, onClose }: { stop: TripStop; onUpdate: (s: TripStop) => void; onClose?: () => void }) {
+function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onUpdate: (s: TripStop) => void; onDelete?: () => void; onClose?: () => void }) {
   const status = stopStatus(stop)
 
   function addEvent() {
@@ -623,30 +674,105 @@ function StopDetail({ stop, onUpdate, onClose }: { stop: TripStop; onUpdate: (s:
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-start gap-3">
-        <span className="text-2xl mt-0.5">{stop.flag}</span>
+        <input
+          value={stop.flag}
+          onChange={(e) => onUpdate({ ...stop, flag: e.target.value })}
+          className="text-2xl mt-0.5 bg-transparent outline-none w-10 shrink-0"
+          maxLength={2}
+          title="Flag emoji"
+        />
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-semibold text-base leading-tight">
-            {stop.capital}
+          <div className="flex items-center gap-2">
+            <input
+              value={stop.capital}
+              onChange={(e) => onUpdate({ ...stop, capital: e.target.value })}
+              className="bg-transparent text-white font-semibold text-base outline-none border-b border-transparent focus:border-white/20 transition-colors flex-1 min-w-0"
+              placeholder="City"
+            />
             {status === 'current' && (
-              <span className="ml-2 text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-accent/20 text-accent">
+              <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-accent/20 text-accent shrink-0">
                 Here now
               </span>
             )}
-          </h3>
-          <p className="text-white/35 text-xs mt-0.5">
-            {stop.country} · {formatDateRange(stop.arrivalDate, stop.departureDate)}
-          </p>
+          </div>
+          <input
+            value={stop.country}
+            onChange={(e) => onUpdate({ ...stop, country: e.target.value })}
+            className="bg-transparent text-white/35 text-xs mt-0.5 outline-none border-b border-transparent focus:border-white/15 transition-colors w-full"
+            placeholder="Country"
+          />
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="shrink-0 text-white/25 hover:text-white/60 transition-colors mt-0.5"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              title="Delete stop"
+              className="text-white/20 hover:text-red-400/70 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-white/25 hover:text-white/60 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Dates */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-white/30 text-[10px] w-16 shrink-0">Arrival date</span>
+          <input
+            type="date"
+            value={stop.arrivalDate}
+            onChange={(e) => onUpdate({ ...stop, arrivalDate: e.target.value })}
+            className="bg-transparent text-white/60 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors w-full"
+            style={{ colorScheme: 'dark' }}
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-white/30 text-[10px] w-16 shrink-0">Depart date</span>
+          <input
+            type="date"
+            value={stop.departureDate}
+            onChange={(e) => onUpdate({ ...stop, departureDate: e.target.value })}
+            className="bg-transparent text-white/60 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors w-full"
+            style={{ colorScheme: 'dark' }}
+          />
+        </div>
+      </div>
+
+      {/* Coordinates */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-white/30 text-[10px] w-16 shrink-0">Latitude</span>
+          <input
+            type="number"
+            step="0.0001"
+            value={stop.lat}
+            onChange={(e) => onUpdate({ ...stop, lat: parseFloat(e.target.value) || 0 })}
+            className="bg-transparent text-white/60 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors w-full"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-white/30 text-[10px] w-16 shrink-0">Longitude</span>
+          <input
+            type="number"
+            step="0.0001"
+            value={stop.lng}
+            onChange={(e) => onUpdate({ ...stop, lng: parseFloat(e.target.value) || 0 })}
+            className="bg-transparent text-white/60 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors w-full"
+          />
+        </div>
       </div>
 
       {/* Transport + times */}
@@ -746,28 +872,42 @@ function StopDetail({ stop, onUpdate, onClose }: { stop: TripStop; onUpdate: (s:
 // ─── Event Card ───────────────────────────────────────────────────────────────
 
 function EventCard({ event, onUpdate, onDelete }: { event: TripEvent; onUpdate: (e: TripEvent) => void; onDelete: () => void }) {
+  const [geocoding, setGeocoding] = useState(false)
+
+  async function geocode() {
+    if (!event.location) return
+    setGeocoding(true)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(event.location)}&format=json&limit=1`, {
+        headers: { 'User-Agent': 'CreativeMotionPM/1.0' },
+      })
+      const data = await res.json() as Array<{ lat: string; lon: string }>
+      if (data[0]) onUpdate({ ...event, venueCoords: [parseFloat(data[0].lat), parseFloat(data[0].lon)] })
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
   return (
     <div className="group/ev rounded-lg border border-surface-border bg-white/[0.03] p-3 space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-white/30 text-xs">🎉</span>
-        <input
-          value={event.title}
-          onChange={(e) => onUpdate({ ...event, title: e.target.value })}
-          placeholder="Event name"
-          className="flex-1 bg-transparent text-white/80 text-sm outline-none placeholder-white/20 border-b border-transparent focus:border-white/10 transition-colors"
-        />
+        <input value={event.title} onChange={(e) => onUpdate({ ...event, title: e.target.value })} placeholder="Event name" className="flex-1 bg-transparent text-white/80 text-sm outline-none placeholder-white/20 border-b border-transparent focus:border-white/10 transition-colors" />
         <button onClick={onDelete} className="opacity-0 group-hover/ev:opacity-100 transition-opacity text-white/20 hover:text-red-400/60">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <input value={event.date ?? ''} onChange={(e) => onUpdate({ ...event, date: e.target.value })} placeholder="Date" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
-        <input value={event.location ?? ''} onChange={(e) => onUpdate({ ...event, location: e.target.value })} placeholder="Location / Venue" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
+        <div className="flex items-center gap-1">
+          <input value={event.location ?? ''} onChange={(e) => onUpdate({ ...event, location: e.target.value })} placeholder="Location / Venue" className="flex-1 min-w-0 bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
+          <button onClick={geocode} disabled={!event.location || geocoding} title="Geocode venue onto map" className="flex-shrink-0 text-xs opacity-40 hover:opacity-80 disabled:opacity-20 transition-opacity cursor-pointer">
+            {geocoding ? '⏳' : event.venueCoords ? '📍' : '🗺️'}
+          </button>
+        </div>
       </div>
       <input value={event.link ?? ''} onChange={(e) => onUpdate({ ...event, link: e.target.value })} placeholder="Luma / event link" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />
-      <input value={event.imageUrl ?? ''} onChange={(e) => onUpdate({ ...event, imageUrl: e.target.value })} placeholder="Cover image URL (optional)" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />
+      <input value={event.imageUrl ?? ''} onChange={(e) => onUpdate({ ...event, imageUrl: e.target.value })} placeholder="🖼  Cover image URL" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />
       <input value={event.sponsorSlot ?? ''} onChange={(e) => onUpdate({ ...event, sponsorSlot: e.target.value })} placeholder="Sponsor slot" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
       <input value={event.notes ?? ''} onChange={(e) => onUpdate({ ...event, notes: e.target.value })} placeholder="Notes" className="w-full bg-transparent text-white/30 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic py-0.5" />
     </div>
