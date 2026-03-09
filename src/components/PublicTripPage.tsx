@@ -389,10 +389,21 @@ function MapEffects() {
 
 const ACCENT = '#6366f1'
 
+const RX_FAVICON = 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png.webp'
+
 export default function PublicTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    document.title = 'RX CEE Trip'
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
+    link.rel = 'icon'
+    link.href = RX_FAVICON
+    document.head.appendChild(link)
+    return () => { document.title = 'Creative Motion — Project Management' }
+  }, [])
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
   const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
 

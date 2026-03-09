@@ -392,10 +392,21 @@ function MapEffects() {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+const RX_FAVICON = 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png.webp'
+
 export default function FriendsTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    document.title = 'RX Friends Trip'
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
+    link.rel = 'icon'
+    link.href = RX_FAVICON
+    document.head.appendChild(link)
+    return () => { document.title = 'Creative Motion — Project Management' }
+  }, [])
   // offer form state keyed by `${stopId}-${need}`
   const [offerForms, setOfferForms] = useState<Record<string, { name: string; contact: string; note: string }>>({})
   const [submitState, setSubmitState] = useState<Record<string, 'idle' | 'sending' | 'done' | 'error'>>({})
