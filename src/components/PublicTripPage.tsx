@@ -13,6 +13,7 @@ interface TripEvent {
   id: string
   title: string
   date?: string
+  time?: string
   location?: string
   venueCoords?: [number, number]
   link?: string
@@ -444,7 +445,7 @@ export default function PublicTripPage() {
                         {(ev.imageUrl || ev.link) && <img src={ev.imageUrl ?? `/api/og-image?url=${encodeURIComponent(ev.link!)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                         <div style={{ padding: '9px 11px' }}>
                           <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
-                          {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
+                          {(ev.date || ev.time || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[[ev.date, ev.time].filter(Boolean).join(' '), ev.location].filter(Boolean).join(' · ')}</div>}
                           {ev.link && <a href={ev.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 5, color: '#818cf8', fontSize: 10, textDecoration: 'none' }}>View event →</a>}
                         </div>
                       </div>

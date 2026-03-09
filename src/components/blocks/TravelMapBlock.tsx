@@ -1047,15 +1047,15 @@ function NeedResponses({ stopId, needs }: { stopId: string; needs: TripNeed[] })
 function EventCard({ event, onUpdate, onDelete }: { event: TripEvent; onUpdate: (e: TripEvent) => void; onDelete: () => void }) {
   const [geocoding, setGeocoding] = useState(false)
 
-  async function geocode() {
-    if (!event.location) return
+  async function geocode(location: string, updatedEvent: TripEvent) {
+    if (!location.trim()) return
     setGeocoding(true)
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(event.location)}&format=json&limit=1`, {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
         headers: { 'User-Agent': 'CreativeMotionPM/1.0' },
       })
       const data = await res.json() as Array<{ lat: string; lon: string }>
-      if (data[0]) onUpdate({ ...event, venueCoords: [parseFloat(data[0].lat), parseFloat(data[0].lon)] })
+      if (data[0]) onUpdate({ ...updatedEvent, venueCoords: [parseFloat(data[0].lat), parseFloat(data[0].lon)] })
     } finally {
       setGeocoding(false)
     }
@@ -1078,13 +1078,26 @@ function EventCard({ event, onUpdate, onDelete }: { event: TripEvent; onUpdate: 
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <input value={event.date ?? ''} onChange={(e) => onUpdate({ ...event, date: e.target.value })} placeholder="Date" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
-        <div className="flex items-center gap-1">
-          <input value={event.location ?? ''} onChange={(e) => onUpdate({ ...event, location: e.target.value })} placeholder="Location / Venue" className="flex-1 min-w-0 bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
-          <button onClick={geocode} disabled={!event.location || geocoding} title="Geocode venue onto map" className="flex-shrink-0 text-xs opacity-40 hover:opacity-80 disabled:opacity-20 transition-opacity cursor-pointer">
-            {geocoding ? '⏳' : event.venueCoords ? '📍' : '🗺️'}
-          </button>
-        </div>
+        <input value={event.date ?? ''} onChange={(e) => onUpdate({ ...event, date: e.target.value })} placeholder="Date (e.g. Apr 3)" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
+        <input
+          type="time"
+          value={event.time ?? ''}
+          onChange={(e) => onUpdate({ ...event, time: e.target.value || undefined })}
+          className="bg-transparent text-white/40 text-xs outline-none border-b border-transparent focus:border-white/10 transition-colors py-0.5"
+          style={{ colorScheme: 'dark' }}
+        />
+      </div>
+      <div className="flex items-center gap-1">
+        <input
+          value={event.location ?? ''}
+          onChange={(e) => onUpdate({ ...event, location: e.target.value, venueCoords: undefined })}
+          onBlur={(e) => { if (e.target.value.trim()) geocode(e.target.value, { ...event, location: e.target.value }) }}
+          placeholder="Location / Venue — auto-pins on map"
+          className="flex-1 min-w-0 bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
+        />
+        <span className="flex-shrink-0 text-xs opacity-40">
+          {geocoding ? '⏳' : event.venueCoords ? '📍' : ''}
+        </span>
       </div>
       <input value={event.link ?? ''} onChange={(e) => onUpdate({ ...event, link: e.target.value })} placeholder="Luma / event link" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />
       <input value={event.imageUrl ?? ''} onChange={(e) => onUpdate({ ...event, imageUrl: e.target.value })} placeholder="🖼  Cover image URL" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />

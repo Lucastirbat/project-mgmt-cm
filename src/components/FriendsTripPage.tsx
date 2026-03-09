@@ -17,7 +17,7 @@ interface TripContact {
 }
 
 interface TripEvent {
-  id: string; title: string; date?: string; location?: string
+  id: string; title: string; date?: string; time?: string; location?: string
   link?: string; imageUrl?: string; venueCoords?: [number, number]; sponsorSlot?: string; notes?: string
   private?: boolean
 }
@@ -558,7 +558,7 @@ export default function FriendsTripPage() {
                             <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, flex: 1 }}>{ev.title || 'Untitled event'}</span>
                             {ev.private && <span title="Friends only" style={{ fontSize: 10, color: ACCENT, opacity: 0.7 }}>🔒</span>}
                           </div>
-                          {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
+                          {(ev.date || ev.time || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[[ev.date, ev.time].filter(Boolean).join(' '), ev.location].filter(Boolean).join(' · ')}</div>}
                           {ev.sponsorSlot && <div style={{ color: ACCENT, fontSize: 10, marginTop: 3 }}>🏷 {ev.sponsorSlot}</div>}
                           {ev.notes && <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, marginTop: 3, fontStyle: 'italic' }}>{ev.notes}</div>}
                           {ev.link && <a href={ev.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 5, color: ACCENT, fontSize: 10, textDecoration: 'none' }}>View event →</a>}

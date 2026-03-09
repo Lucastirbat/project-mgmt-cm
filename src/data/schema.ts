@@ -49,6 +49,7 @@ export interface TripEvent {
   id: string
   title: string
   date?: string
+  time?: string       // 'HH:MM' — event start time
   location?: string
   venueCoords?: [number, number]  // [lat, lng] — geocoded via Nominatim
   link?: string
