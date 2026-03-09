@@ -48,6 +48,7 @@ export interface TripEvent {
   title: string
   date?: string
   location?: string
+  venueCoords?: [number, number]  // [lat, lng] — geocoded via Nominatim
   link?: string
   imageUrl?: string   // manual cover image override (bypasses og:image proxy)
   sponsorSlot?: string

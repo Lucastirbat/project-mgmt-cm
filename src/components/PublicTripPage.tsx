@@ -14,6 +14,7 @@ interface TripEvent {
   title: string
   date?: string
   location?: string
+  venueCoords?: [number, number]
   link?: string
   imageUrl?: string
 }
@@ -398,6 +399,16 @@ export default function PublicTripPage() {
                 </Tooltip>
               </CircleMarker>
             )}
+
+            {/* Venue markers for current stop's events */}
+            {panelStop?.events.map((ev) => ev.venueCoords ? (
+              <CircleMarker key={`venue-${ev.id}`} center={ev.venueCoords} radius={6}
+                pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.9, color: '#fff', weight: 1.5 }}>
+                <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>📍 {ev.title}</span>
+                </Tooltip>
+              </CircleMarker>
+            ) : null)}
           </MapContainer>
         )}
 
