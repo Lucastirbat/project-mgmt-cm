@@ -346,22 +346,6 @@ export default function PublicTripPage() {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: '1px solid #1f1f1f', flexShrink: 0, background: '#0d0d0d' }}>
-        <span style={{ fontSize: 22 }}>🗺️</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: '#fff', fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>Eastern Europe Tour 2026</div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 1 }}>{stops.length} cities · Mar – May 2026 · ReaktorX</div>
-        </div>
-        {currentStop && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 20, padding: '5px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT, display: 'inline-block', boxShadow: `0 0 8px ${ACCENT}` }} />
-            {currentStop.flag} {currentStop.capital}
-          </div>
-        )}
-        <a href="/trip/friends" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>Friends view →</a>
-      </div>
-
       {/* Map */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Loading map…</div>}
@@ -410,6 +394,9 @@ export default function PublicTripPage() {
             )}
           </MapContainer>
         )}
+
+        {/* Friends view button — top right floating */}
+        <a href="/trip/friends" style={{ position: 'absolute', top: 12, right: 52, zIndex: 1000, fontSize: 11, color: 'rgba(255,255,255,0.4)', textDecoration: 'none', padding: '5px 11px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>Friends view →</a>
 
         {/* Left detail overlay — always visible, tracks playhead */}
         {panelStop && (

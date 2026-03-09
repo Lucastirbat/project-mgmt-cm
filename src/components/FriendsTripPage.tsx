@@ -337,28 +337,11 @@ export default function FriendsTripPage() {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: `1px solid rgba(245,158,11,0.12)`, flexShrink: 0, background: '#0d0d0d' }}>
-        <span style={{ fontSize: 22 }}>🧭</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: '#fff', fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em' }}>
-            Eastern Europe Tour 2026
-            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 500, background: ACCENT_DIM, color: ACCENT, borderRadius: 20, padding: '2px 8px', border: `1px solid ${ACCENT_BORDER}` }}>friends</span>
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 1 }}>{stops.length} cities · Mar – May 2026 · Full details view</div>
-        </div>
-        {currentStop && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: ACCENT_DIM, border: `1px solid ${ACCENT_BORDER}`, borderRadius: 20, padding: '5px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: ACCENT, display: 'inline-block', boxShadow: `0 0 8px ${ACCENT}` }} />
-            {currentStop.flag} {currentStop.capital}
-          </div>
-        )}
-        <a href="/trip" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>Public view →</a>
-      </div>
-
       {/* Map */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 13, zIndex: 999 }}>Loading…</div>}
+        {/* Public view button — top right floating */}
+        <a href="/trip" style={{ position: 'absolute', top: 12, right: 52, zIndex: 1000, fontSize: 11, color: 'rgba(255,255,255,0.4)', textDecoration: 'none', padding: '5px 11px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>Public view →</a>
 
         {isClient && stops.length > 0 && (
           <MapContainer center={mapCenter} zoom={4} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#0a0a0a' }} zoomControl={false} attributionControl={false}>
