@@ -493,10 +493,7 @@ export default function PublicTripPage() {
           </MapContainer>
         )}
 
-        {/* Friends view button — top right floating */}
-        <a href="/trip/friends" style={{ position: 'absolute', top: 12, right: 52, zIndex: 1000, fontSize: 11, color: 'rgba(255,255,255,0.4)', textDecoration: 'none', padding: '5px 11px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>Friends view →</a>
-
-        {/* Left detail overlay — always visible, tracks playhead */}
+{/* Left detail overlay — always visible, tracks playhead */}
         {panelStop && (
           <div className="trip-panel" style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 280, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.94)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ padding: 16 }}>
