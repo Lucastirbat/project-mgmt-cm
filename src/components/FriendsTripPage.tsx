@@ -315,8 +315,9 @@ export default function FriendsTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
-  // draft offer text keyed by `${stopId}-${need}`
-  const [offers, setOffers] = useState<Record<string, string>>({})
+  // offer form state keyed by `${stopId}-${need}`
+  const [offerForms, setOfferForms] = useState<Record<string, { name: string; contact: string; note: string }>>({})
+  const [submitState, setSubmitState] = useState<Record<string, 'idle' | 'sending' | 'done' | 'error'>>({})
 
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
   const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
@@ -434,7 +435,7 @@ export default function FriendsTripPage() {
 
         {/* Left detail overlay — always visible, tracks playhead */}
         {panelStop && (
-          <div style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 300, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(12px)', border: `1px solid rgba(245,158,11,0.12)` }}>
+          <div className="trip-panel" style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 300, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(12px)', border: `1px solid rgba(245,158,11,0.12)` }}>
             <div style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
                 <span style={{ fontSize: 26, lineHeight: 1 }}>{panelStop.flag}</span>
@@ -464,39 +465,77 @@ export default function FriendsTripPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                   {panelStop.needs.map((need) => {
                     const { icon, label } = NEED_CFG[need]
-                    const note = panelStop.needsNotes?.[need]
-                    const offerKey = `${panelStop.id}-${need}`
-                    const draft = offers[offerKey] ?? ''
-                    const copied = draft === '__copied__'
+                    const adminNote = panelStop.needsNotes?.[need]
+                    const key = `${panelStop.id}-${need}`
+                    const form = offerForms[key] ?? { name: '', contact: '', note: '' }
+                    const state = submitState[key] ?? 'idle'
+                    const setField = (field: 'name' | 'contact' | 'note', val: string) =>
+                      setOfferForms(o => ({ ...o, [key]: { ...form, [field]: val } }))
+                    const canSubmit = form.name.trim() && form.note.trim() && state === 'idle'
+
+                    const stop = panelStop
+                    async function submit() {
+                      setSubmitState(s => ({ ...s, [key]: 'sending' }))
+                      try {
+                        const res = await fetch('/api/trip/respond', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            stopId: stop.id,
+                            stopLabel: `${stop.flag} ${stop.capital}`,
+                            need,
+                            name: form.name.trim(),
+                            contact: form.contact.trim(),
+                            note: form.note.trim(),
+                          }),
+                        })
+                        setSubmitState(s => ({ ...s, [key]: res.ok ? 'done' : 'error' }))
+                      } catch {
+                        setSubmitState(s => ({ ...s, [key]: 'error' }))
+                      }
+                    }
+
                     return (
-                      <div key={need} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 10, padding: '9px 11px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: note ? 4 : 6 }}>
+                      <div key={need} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 10, padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                           <span style={{ fontSize: 14 }}>{icon}</span>
-                          <span style={{ color: '#fca5a5', fontSize: 11, fontWeight: 600, flex: 1 }}>{label}</span>
+                          <span style={{ color: '#fca5a5', fontSize: 11, fontWeight: 600 }}>{label}</span>
                         </div>
-                        {note && (
-                          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginBottom: 7, fontStyle: 'italic' }}>{note}</div>
+                        {adminNote && (
+                          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginBottom: 8, fontStyle: 'italic', lineHeight: 1.4 }}>{adminNote}</div>
                         )}
-                        <textarea
-                          value={copied ? '' : draft}
-                          onChange={(e) => setOffers(o => ({ ...o, [offerKey]: e.target.value }))}
-                          placeholder="Write your offer or recommendation…"
-                          rows={2}
-                          style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.7)', fontSize: 11, padding: '5px 7px', resize: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
-                        />
-                        <button
-                          disabled={!draft || copied}
-                          onClick={() => {
-                            const msg = `Hi! Re: ${panelStop.capital} – ${label.toLowerCase()}\n\n${draft}`
-                            navigator.clipboard.writeText(msg).then(() => {
-                              setOffers(o => ({ ...o, [offerKey]: '__copied__' }))
-                              setTimeout(() => setOffers(o => ({ ...o, [offerKey]: draft })), 2000)
-                            })
-                          }}
-                          style={{ marginTop: 5, fontSize: 10, padding: '3px 9px', borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.15)', color: copied ? '#86efac' : '#fca5a5', cursor: draft ? 'pointer' : 'default', opacity: draft ? 1 : 0.4, transition: 'color 0.2s' }}
-                        >
-                          {copied ? '✓ Copied!' : 'Copy message'}
-                        </button>
+                        {state === 'done' ? (
+                          <div style={{ color: '#86efac', fontSize: 11, padding: '6px 0' }}>✓ Thanks! Your offer was sent.</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <input
+                              value={form.name}
+                              onChange={e => setField('name', e.target.value)}
+                              placeholder="Your name *"
+                              style={inputStyle}
+                            />
+                            <input
+                              value={form.contact}
+                              onChange={e => setField('contact', e.target.value)}
+                              placeholder="Contact (email, phone, IG…)"
+                              style={inputStyle}
+                            />
+                            <textarea
+                              value={form.note}
+                              onChange={e => setField('note', e.target.value)}
+                              placeholder="Your offer or recommendation… *"
+                              rows={2}
+                              style={{ ...inputStyle, resize: 'none' }}
+                            />
+                            <button
+                              disabled={!canSubmit}
+                              onClick={submit}
+                              style={{ alignSelf: 'flex-start', fontSize: 10, padding: '4px 10px', borderRadius: 5, border: '1px solid rgba(239,68,68,0.35)', background: canSubmit ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.05)', color: state === 'error' ? '#f87171' : '#fca5a5', cursor: canSubmit ? 'pointer' : 'default', opacity: canSubmit ? 1 : 0.5, transition: 'opacity 0.2s' }}
+                            >
+                              {state === 'sending' ? 'Sending…' : state === 'error' ? 'Error — retry' : 'Send offer'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -548,7 +587,14 @@ export default function FriendsTripPage() {
           </div>
         )}
 
-        <style>{`.leaflet-container { background: #0a0a0a !important; }`}</style>
+        <style>{`
+          .leaflet-container { background: #0a0a0a !important; }
+          .trip-panel::-webkit-scrollbar { width: 3px; }
+          .trip-panel::-webkit-scrollbar-track { background: transparent; }
+          .trip-panel::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.2); border-radius: 2px; }
+          .trip-panel::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.4); }
+          .trip-panel { scrollbar-width: thin; scrollbar-color: rgba(245,158,11,0.2) transparent; }
+        `}</style>
       </div>
 
       {/* Timeline scrubber */}
@@ -564,6 +610,12 @@ export default function FriendsTripPage() {
       )}
     </div>
   )
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 6, color: 'rgba(255,255,255,0.7)', fontSize: 11, padding: '5px 8px',
+  outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
 }
 
 function SectionLabel({ label, color }: { label: string; color: string }) {

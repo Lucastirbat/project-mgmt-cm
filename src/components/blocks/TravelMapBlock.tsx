@@ -601,7 +601,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         {/* Left detail card overlay */}
         {selectedStop && (
           <div
-            className="absolute top-3 left-3 bottom-3 w-72 z-[1000] overflow-y-auto rounded-xl"
+            className="absolute top-3 left-3 bottom-3 w-72 z-[1000] overflow-y-auto rounded-xl scrollbar-thin"
             style={{
               background: 'rgba(15,15,15,0.93)',
               backdropFilter: 'blur(10px)',
@@ -903,7 +903,58 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
             </div>
           )}
         </div>
+
+        {/* Friend responses to needs */}
+        {stop.needs && stop.needs.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Friend responses</h4>
+            <NeedResponses stopId={stop.id} needs={stop.needs} />
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+// ─── Need Responses (admin read-only) ────────────────────────────────────────
+
+interface TripResponse {
+  id: string; stopId: string; need: string
+  name: string; contact: string; note: string; submittedAt: string
+}
+
+function NeedResponses({ stopId, needs }: { stopId: string; needs: TripNeed[] }) {
+  const [responses, setResponses] = useState<TripResponse[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/trip/respond')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: TripResponse[]) => {
+        setResponses(data.filter(r => r.stopId === stopId && needs.includes(r.need as TripNeed)))
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }, [stopId, needs.join(',')])
+
+  if (!loaded) return <p className="text-white/20 text-xs italic">Loading…</p>
+  if (!responses.length) return <p className="text-white/20 text-xs italic">No responses yet</p>
+
+  const NEED_LABEL: Record<string, string> = { accommodation: '🛏', travel: '✈️', venue: '📍' }
+
+  return (
+    <div className="space-y-2">
+      {responses.map(r => (
+        <div key={r.id} className="rounded-lg border border-red-500/20 bg-red-500/5 p-2.5 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs">{NEED_LABEL[r.need] ?? '❓'}</span>
+            <span className="text-white/80 text-xs font-medium">{r.name}</span>
+            {r.contact && <span className="text-white/30 text-xs">{r.contact}</span>}
+            <span className="ml-auto text-white/20 text-[9px]">{new Date(r.submittedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span>
+          </div>
+          <p className="text-white/50 text-xs leading-relaxed">{r.note}</p>
+        </div>
+      ))}
     </div>
   )
 }

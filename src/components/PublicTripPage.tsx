@@ -418,7 +418,7 @@ export default function PublicTripPage() {
 
         {/* Left detail overlay — always visible, tracks playhead */}
         {panelStop && (
-          <div style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 280, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.94)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="trip-panel" style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 280, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.94)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontSize: 26, lineHeight: 1 }}>{panelStop.flag}</span>
@@ -455,7 +455,14 @@ export default function PublicTripPage() {
           </div>
         )}
 
-        <style>{`.leaflet-container { background: #0a0a0a !important; }`}</style>
+        <style>{`
+          .leaflet-container { background: #0a0a0a !important; }
+          .trip-panel::-webkit-scrollbar { width: 3px; }
+          .trip-panel::-webkit-scrollbar-track { background: transparent; }
+          .trip-panel::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.25); border-radius: 2px; }
+          .trip-panel::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.45); }
+          .trip-panel { scrollbar-width: thin; scrollbar-color: rgba(99,102,241,0.25) transparent; }
+        `}</style>
       </div>
 
       {/* Timeline scrubber */}

@@ -23,6 +23,21 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Global thin scrollbars to match dark theme */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  *::-webkit-scrollbar { width: 4px; height: 4px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
   ::selection {
     background-color: #6366f130;
     color: #f5f5f5;
