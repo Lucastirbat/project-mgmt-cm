@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -66,6 +66,15 @@ function fmtPlayhead(ms: number, visibleMs: number) {
 }
 
 // ─── Transport helpers ────────────────────────────────────────────────────────
+
+function getStopAtPlayhead(stops: TripStop[], playheadMs: number): TripStop | null {
+  if (!stops.length) return null
+  let result = stops[0]
+  for (const stop of stops) {
+    if (legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs) result = stop
+  }
+  return result
+}
 
 function arcPoints(from: [number, number], to: [number, number], n = 40): [number, number][] {
   const midLat = (from[0] + to[0]) / 2
@@ -235,11 +244,19 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
       {/* Playhead label */}
       <span style={{ position: 'absolute', top: 20, left: playheadX + 6, fontSize: 8, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', zIndex: 6, pointerEvents: 'none', lineHeight: 1 }}>{fmtPlayhead(playheadMs, visibleMs)}</span>
 
-      {/* Draggable handle */}
-      <div
-        style={{ position: 'absolute', top: 0, left: playheadX - 7, width: 14, height: 14, borderRadius: '50%', backgroundColor: accent, border: '2.5px solid rgba(255,255,255,0.85)', cursor: 'ew-resize', boxShadow: `0 0 10px ${accent}b0`, zIndex: 10, pointerEvents: 'auto' }}
-        onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
-      />
+      {/* Draggable face handle */}
+      {(() => {
+        const progress = tripEndMs > tripStartMs ? (playheadMs - tripStartMs) / (tripEndMs - tripStartMs) : 0
+        const faceSrc = progress < 1/3 ? '/face1.png' : progress < 2/3 ? '/face2.png' : '/face3.png'
+        return (
+          <div
+            style={{ position: 'absolute', top: 1, left: playheadX - 11, width: 22, height: 22, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 12px ${accent}c0`, zIndex: 10, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
+            onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
+          >
+            <img src={faceSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          </div>
+        )
+      })()}
 
       <span style={{ position: 'absolute', bottom: 5, right: 7, fontSize: 8, color: 'rgba(255,255,255,0.15)', lineHeight: 1 }}>scroll to zoom · drag to pan</span>
     </div>
@@ -292,7 +309,6 @@ const ACCENT = '#6366f1'
 export default function PublicTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
 
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
@@ -317,17 +333,14 @@ export default function PublicTripPage() {
     fetch('/api/embed/trip')
       .then((r) => r.json())
       .then((d: { stops: TripStop[] }) => {
-        const loaded = d.stops ?? []
-        setStops(loaded)
-        const cur = loaded.find((s) => stopStatus(s) === 'current')
-        setSelectedId(cur?.id ?? loaded[0]?.id ?? null)
+        setStops(d.stops ?? [])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
-  const selectedStop = stops.find((s) => s.id === selectedId) ?? null
+  const panelStop = getStopAtPlayhead(stops, playheadMs)
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
   const travelerPos = getTravelerPos(stops, playheadMs)
 
@@ -354,7 +367,8 @@ export default function PublicTripPage() {
         {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Loading map…</div>}
 
         {isClient && stops.length > 0 && (
-          <MapContainer center={mapCenter} zoom={4} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#0a0a0a' }} zoomControl={true} attributionControl={false}>
+          <MapContainer center={mapCenter} zoom={4} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#0a0a0a' }} zoomControl={false} attributionControl={false}>
+            <ZoomControl position="topright" />
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap &copy; CARTO' />
             <MapEffects />
 
@@ -376,11 +390,11 @@ export default function PublicTripPage() {
             {/* City markers */}
             {stops.map((stop) => {
               const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
-              const isSelected = stop.id === selectedId
+              const isSelected = stop.id === panelStop?.id
               const isCurrent = stopStatus(stop) === 'current'
               const color = isCurrent ? ACCENT : reached ? '#a78bfa' : '#4b5563'
               return (
-                <CircleMarker key={stop.id} center={[stop.lat, stop.lng]} radius={isCurrent ? 10 : isSelected ? 9 : 7} pathOptions={{ fillColor: color, fillOpacity: reached ? 0.9 : 0.4, color: isSelected ? '#ffffff' : color, weight: isSelected ? 2 : 1 }} eventHandlers={{ click: () => setSelectedId(stop.id) }}>
+                <CircleMarker key={stop.id} center={[stop.lat, stop.lng]} radius={isCurrent ? 10 : isSelected ? 9 : 7} pathOptions={{ fillColor: color, fillOpacity: reached ? 0.9 : 0.4, color: isSelected ? '#ffffff' : color, weight: isSelected ? 2 : 1 }} eventHandlers={{ click: () => setPlayheadMs(Math.max(tripStartMs, Math.min(tripEndMs, legMs(stop.arrivalDate, stop.arrivalTime)))) }}>
                   <Tooltip direction="top" offset={[0, -8]} opacity={0.95}><span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>{stop.flag} {stop.capital}</span></Tooltip>
                 </CircleMarker>
               )
@@ -397,31 +411,30 @@ export default function PublicTripPage() {
           </MapContainer>
         )}
 
-        {/* Left detail overlay */}
-        {selectedStop && (
+        {/* Left detail overlay — always visible, tracks playhead */}
+        {panelStop && (
           <div style={{ position: 'absolute', top: 12, left: 12, bottom: 12, width: 280, zIndex: 1000, overflowY: 'auto', borderRadius: 14, background: 'rgba(10,10,10,0.94)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
-                <span style={{ fontSize: 26, lineHeight: 1 }}>{selectedStop.flag}</span>
+                <span style={{ fontSize: 26, lineHeight: 1 }}>{panelStop.flag}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: '#fff', fontSize: 15, fontWeight: 600, lineHeight: 1.2 }}>
-                    {selectedStop.capital}
-                    {stopStatus(selectedStop) === 'current' && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 400, background: 'rgba(99,102,241,0.2)', color: '#818cf8', borderRadius: 20, padding: '2px 7px' }}>Here now</span>}
+                    {panelStop.capital}
+                    {stopStatus(panelStop) === 'current' && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 400, background: 'rgba(99,102,241,0.2)', color: '#818cf8', borderRadius: 20, padding: '2px 7px' }}>Here now</span>}
                   </div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{selectedStop.country} · {fmt(selectedStop.arrivalDate)} – {fmt(selectedStop.departureDate)}</div>
-                  {selectedStop.transport && (
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{panelStop.country} · {fmt(panelStop.arrivalDate)} – {fmt(panelStop.departureDate)}</div>
+                  {panelStop.transport && (
                     <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 1 }}>
-                      {{ plane: '✈️', bus: '🚌', car: '🚗' }[selectedStop.transport]} via {selectedStop.transport}
+                      {{ plane: '✈️', bus: '🚌', car: '🚗' }[panelStop.transport]} via {panelStop.transport}
                     </div>
                   )}
                 </div>
-                <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 2, fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Events</div>
-              {selectedStop.events.length === 0
+              {panelStop.events.length === 0
                 ? <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontStyle: 'italic' }}>No events scheduled</div>
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {selectedStop.events.map((ev) => (
+                    {panelStop.events.map((ev) => (
                       <div key={ev.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '9px 11px' }}>
                         <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
                         {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}

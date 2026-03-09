@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Block, TripStop, TripEvent, TripContact } from '../../data/schema'
 
@@ -480,9 +480,10 @@ export default function TravelMapBlock({ block, onChange }: Props) {
             zoom={4}
             scrollWheelZoom={false}
             style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
-            zoomControl={true}
+            zoomControl={false}
             attributionControl={false}
           >
+            <ZoomControl position="topright" />
             <TileLayer
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               attribution='&copy; OpenStreetMap &copy; CARTO'
