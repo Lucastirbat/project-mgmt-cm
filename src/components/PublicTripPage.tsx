@@ -69,7 +69,21 @@ function fmtPlayhead(ms: number, visibleMs: number) {
   return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-// ─── Transport helpers ────────────────────────────────────────────────────────
+// ─── Timeline helpers ─────────────────────────────────────────────────────────
+
+const TRANSPORT_COLOR: Record<string, string> = { plane: 'rgba(99,102,241,0.55)', bus: 'rgba(16,185,129,0.55)', car: 'rgba(245,158,11,0.55)' }
+
+function parseEventMs(date: string | undefined, time: string | undefined, stopYear: number): number | null {
+  if (!date?.trim()) return null
+  for (const attempt of [`${date} ${stopYear}`, date]) {
+    const d = new Date(time ? `${attempt} ${time}` : attempt)
+    if (!isNaN(d.getTime())) {
+      if (!time) d.setHours(12, 0, 0, 0)
+      return d.getTime()
+    }
+  }
+  return null
+}
 
 function getStopAtPlayhead(stops: TripStop[], playheadMs: number): TripStop | null {
   if (!stops.length) return null
@@ -241,6 +255,32 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
           <span style={{ position: 'absolute', bottom: 7, left: 4, fontSize: 12, lineHeight: 1, opacity: reached ? 1 : 0.3 }}>{stop.flag}</span>
         </div>
       )})}
+
+      {/* Travel bands */}
+      {stops.slice(0, -1).map((stop, i) => {
+        const next = stops[i + 1]
+        const x1 = msToX(legMs(stop.departureDate, stop.departureTime))
+        const x2 = msToX(legMs(next.arrivalDate, next.arrivalTime))
+        if (x2 < 0 || x1 > containerWidth) return null
+        const color = TRANSPORT_COLOR[next.transport ?? ''] ?? 'rgba(148,163,184,0.4)'
+        return <div key={`travel-${stop.id}`} title={`${stop.capital} → ${next.capital}`} style={{ position: 'absolute', bottom: 0, left: Math.max(0, x1), width: Math.max(2, Math.min(x2, containerWidth) - Math.max(0, x1)), height: 3, background: color, pointerEvents: 'none' }} />
+      })}
+
+      {/* Event dots */}
+      {stops.flatMap(stop =>
+        stop.events.filter(ev => !ev.private).map(ev => {
+          const ms = parseEventMs(ev.date, ev.time, new Date(stop.arrivalDate + 'T12:00:00').getFullYear())
+          if (ms === null) return null
+          const x = msToX(ms)
+          if (x < -6 || x > containerWidth + 6) return null
+          const past = ms <= playheadMs
+          return (
+            <div key={ev.id} title={`${ev.title}${ev.time ? ' · ' + ev.time : ''}`} style={{ position: 'absolute', bottom: 22, left: x, transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: past ? accent : 'rgba(255,255,255,0.25)', border: `1px solid ${past ? accent : 'rgba(255,255,255,0.35)'}`, boxShadow: past ? `0 0 4px ${accent}80` : 'none' }} />
+            </div>
+          )
+        })
+      )}
 
       {/* Playhead line */}
       <div style={{ position: 'absolute', top: 0, bottom: 0, left: playheadX, borderLeft: `2px solid ${accent}e6`, zIndex: 5, pointerEvents: 'none', transition: 'left 0.06s linear' }} />
