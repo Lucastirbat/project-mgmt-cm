@@ -17,6 +17,7 @@ interface TripEvent {
   venueCoords?: [number, number]
   link?: string
   imageUrl?: string
+  private?: boolean
 }
 
 interface TripStop {
@@ -401,7 +402,7 @@ export default function PublicTripPage() {
             )}
 
             {/* Venue markers for current stop's events */}
-            {panelStop?.events.map((ev) => ev.venueCoords ? (
+            {panelStop?.events.filter(ev => !ev.private).map((ev) => ev.venueCoords ? (
               <CircleMarker key={`venue-${ev.id}`} center={ev.venueCoords} radius={6}
                 pathOptions={{ fillColor: '#f59e0b', fillOpacity: 0.9, color: '#fff', weight: 1.5 }}>
                 <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
@@ -435,10 +436,10 @@ export default function PublicTripPage() {
                 </div>
               </div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Events</div>
-              {panelStop.events.length === 0
+              {panelStop.events.filter(ev => !ev.private).length === 0
                 ? <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontStyle: 'italic' }}>No events scheduled</div>
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {panelStop.events.map((ev) => (
+                    {panelStop.events.filter(ev => !ev.private).map((ev) => (
                       <div key={ev.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden' }}>
                         {(ev.imageUrl || ev.link) && <img src={ev.imageUrl ?? `/api/og-image?url=${encodeURIComponent(ev.link!)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                         <div style={{ padding: '9px 11px' }}>

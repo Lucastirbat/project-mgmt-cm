@@ -43,6 +43,8 @@ export interface TripContact {
   notes?: string
 }
 
+export type TripNeed = 'accommodation' | 'travel' | 'venue'
+
 export interface TripEvent {
   id: string
   title: string
@@ -53,6 +55,7 @@ export interface TripEvent {
   imageUrl?: string   // manual cover image override (bypasses og:image proxy)
   sponsorSlot?: string
   notes?: string
+  private?: boolean   // if true, only shown on friends view
 }
 
 export interface TripStop {
@@ -67,6 +70,7 @@ export interface TripStop {
   arrivalTime?: string    // 'HH:MM' — local time of arrival
   departureTime?: string  // 'HH:MM' — local time of departure
   transport?: 'plane' | 'bus' | 'car'  // how you travel TO this stop
+  needs?: TripNeed[]      // help requests shown on friends view
   events: TripEvent[]
   contacts: TripContact[]
 }

@@ -18,13 +18,17 @@ interface TripContact {
 interface TripEvent {
   id: string; title: string; date?: string; location?: string
   link?: string; imageUrl?: string; venueCoords?: [number, number]; sponsorSlot?: string; notes?: string
+  private?: boolean
 }
+
+type TripNeed = 'accommodation' | 'travel' | 'venue'
 
 interface TripStop {
   id: string; country: string; capital: string; flag: string
   lat: number; lng: number; arrivalDate: string; departureDate: string
   arrivalTime?: string; departureTime?: string
   transport?: 'plane' | 'bus' | 'car'
+  needs?: TripNeed[]
   events: TripEvent[]; contacts: TripContact[]
 }
 
@@ -430,6 +434,26 @@ export default function FriendsTripPage() {
                 </div>
               </div>
 
+              {/* Needs / help requests */}
+              {panelStop.needs && panelStop.needs.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  {panelStop.needs.map((need) => {
+                    const cfg: Record<TripNeed, { icon: string; label: string }> = {
+                      accommodation: { icon: '🛏', label: 'Looking for accommodation' },
+                      travel:        { icon: '✈️', label: 'Looking for travel / transport' },
+                      venue:         { icon: '📍', label: 'Looking for venue or partners' },
+                    }
+                    const { icon, label } = cfg[need]
+                    return (
+                      <div key={need} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '7px 10px' }}>
+                        <span style={{ fontSize: 14 }}>{icon}</span>
+                        <span style={{ color: '#fca5a5', fontSize: 11, fontWeight: 500 }}>{label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
               <SectionLabel label="Events" color={ACCENT} />
               {panelStop.events.length === 0
                 ? <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontStyle: 'italic', marginBottom: 16 }}>No events scheduled</div>
@@ -438,7 +462,10 @@ export default function FriendsTripPage() {
                       <div key={ev.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
                         {(ev.imageUrl || ev.link) && <img src={ev.imageUrl ?? `/api/og-image?url=${encodeURIComponent(ev.link!)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                         <div style={{ padding: '9px 11px' }}>
-                          <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                            <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, flex: 1 }}>{ev.title || 'Untitled event'}</span>
+                            {ev.private && <span title="Friends only" style={{ fontSize: 10, color: ACCENT, opacity: 0.7 }}>🔒</span>}
+                          </div>
                           {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
                           {ev.sponsorSlot && <div style={{ color: ACCENT, fontSize: 10, marginTop: 3 }}>🏷 {ev.sponsorSlot}</div>}
                           {ev.notes && <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, marginTop: 3, fontStyle: 'italic' }}>{ev.notes}</div>}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { Block, TripStop, TripEvent, TripContact } from '../../data/schema'
+import type { Block, TripStop, TripEvent, TripContact, TripNeed } from '../../data/schema'
 
 interface Props {
   block: Block
@@ -824,6 +824,34 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
         </div>
       </div>
 
+      {/* Needs / help requests */}
+      <div className="space-y-1.5">
+        <h4 className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">Help needed (friends view)</h4>
+        <div className="flex flex-wrap gap-2">
+          {(['accommodation', 'travel', 'venue'] as TripNeed[]).map((need) => {
+            const active = stop.needs?.includes(need) ?? false
+            const labels: Record<TripNeed, string> = { accommodation: '🛏 Accommodation', travel: '✈️ Travel', venue: '📍 Venue / partners' }
+            return (
+              <button
+                key={need}
+                onClick={() => {
+                  const cur = stop.needs ?? []
+                  onUpdate({ ...stop, needs: active ? cur.filter((n) => n !== need) : [...cur, need] })
+                }}
+                className="text-xs px-2 py-0.5 rounded-md border transition-colors"
+                style={{
+                  background: active ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                  borderColor: active ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)',
+                  color: active ? '#fca5a5' : 'rgba(255,255,255,0.3)',
+                }}
+              >
+                {labels[need]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <div className="space-y-4">
         {/* Events */}
         <div className="space-y-3">
@@ -897,6 +925,13 @@ function EventCard({ event, onUpdate, onDelete }: { event: TripEvent; onUpdate: 
       <div className="flex items-center gap-2">
         <span className="text-white/30 text-xs">🎉</span>
         <input value={event.title} onChange={(e) => onUpdate({ ...event, title: e.target.value })} placeholder="Event name" className="flex-1 bg-transparent text-white/80 text-sm outline-none placeholder-white/20 border-b border-transparent focus:border-white/10 transition-colors" />
+        <button
+          onClick={() => onUpdate({ ...event, private: !event.private })}
+          title={event.private ? 'Friends only — click to make public' : 'Public — click to make friends-only'}
+          className="opacity-60 hover:opacity-100 transition-opacity text-xs"
+        >
+          {event.private ? '🔒' : '🌐'}
+        </button>
         <button onClick={onDelete} className="opacity-0 group-hover/ev:opacity-100 transition-opacity text-white/20 hover:text-red-400/60">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
