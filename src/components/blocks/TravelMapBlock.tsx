@@ -449,26 +449,30 @@ export default function TravelMapBlock({ block, onChange }: Props) {
   }
 
   function addStop() {
-    const lastStop = stops[stops.length - 1]
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const nextDay = new Date(tomorrow)
-    nextDay.setDate(nextDay.getDate() + 3)
-    const arrivalDate = lastStop?.departureDate ?? tomorrow.toISOString().slice(0, 10)
-    const departureDate = new Date(new Date(arrivalDate).getTime() + 3 * 86400000).toISOString().slice(0, 10)
+    // Insert after selected stop, or at end if none selected
+    const insertIdx = selectedId ? stops.findIndex((s) => s.id === selectedId) + 1 : stops.length
+    const prevStop = stops[insertIdx - 1]
+    const nextStop = stops[insertIdx]
+    const arrivalDate = prevStop?.departureDate ?? new Date().toISOString().slice(0, 10)
+    const departureDate = nextStop?.arrivalDate
+      ?? new Date(new Date(arrivalDate).getTime() + 3 * 86400000).toISOString().slice(0, 10)
     const newStop: TripStop = {
       id: `stop-${uid()}`,
       country: 'Country',
       capital: 'City',
       flag: '🏳️',
-      lat: lastStop ? lastStop.lat + 2 : 48.8566,
-      lng: lastStop ? lastStop.lng + 2 : 2.3522,
+      lat: prevStop && nextStop
+        ? (prevStop.lat + nextStop.lat) / 2
+        : prevStop ? prevStop.lat + 2 : 48.8566,
+      lng: prevStop && nextStop
+        ? (prevStop.lng + nextStop.lng) / 2
+        : prevStop ? prevStop.lng + 2 : 2.3522,
       arrivalDate,
       departureDate,
       events: [],
       contacts: [],
     }
-    const newStops = [...stops, newStop]
+    const newStops = [...stops.slice(0, insertIdx), newStop, ...stops.slice(insertIdx)]
     onChange({ ...block, tripStops: newStops })
     setSelectedId(newStop.id)
   }
@@ -631,7 +635,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
-        Add stop
+        {selectedId ? `Insert stop after ${stops.find(s => s.id === selectedId)?.capital ?? 'selected'}` : 'Add stop'}
       </button>
 
     </div>
