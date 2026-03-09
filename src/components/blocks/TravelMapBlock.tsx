@@ -208,11 +208,46 @@ function TripTimeline({
       panAnchor.current = null
     }
 
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging.current || !containerRef.current) return
+      e.preventDefault()
+      const rect = containerRef.current.getBoundingClientRect()
+      const x = e.touches[0].clientX - rect.left
+      const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+      if (dragging.current === 'playhead') {
+        cbRef.current.onPlayheadChange(Math.max(tripStartMs, Math.min(tripEndMs, vs + (x / w) * (ve - vs))))
+      } else if (dragging.current === 'pan' && panAnchor.current) {
+        const { mouseX, viewStart, viewEnd } = panAnchor.current
+        const msPerPx = (viewEnd - viewStart) / w
+        const delta = (mouseX - x) * msPerPx
+        let ns = viewStart + delta, ne = viewEnd + delta
+        if (ns < tripStartMs) { ne += tripStartMs - ns; ns = tripStartMs }
+        if (ne > tripEndMs) { ns -= ne - tripEndMs; ne = tripEndMs }
+        cbRef.current.onViewChange(Math.max(tripStartMs, ns), Math.min(tripEndMs, ne))
+      }
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (dragging.current === 'pan' && panAnchor.current && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const dist = Math.abs((e.changedTouches[0].clientX - rect.left) - panAnchor.current.mouseX)
+        if (dist < 5) {
+          const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+          const ms = vs + (panAnchor.current.mouseX / w) * (ve - vs)
+          cbRef.current.onPlayheadChange(Math.max(tripStartMs, Math.min(tripEndMs, ms)))
+        }
+      }
+      dragging.current = null
+      panAnchor.current = null
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd)
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
     }
   }, [tripStartMs, tripEndMs])
 
@@ -240,9 +275,20 @@ function TripTimeline({
     e.preventDefault()
   }
 
+  function handleContainerTouchStart(e: React.TouchEvent) {
+    const rect = containerRef.current!.getBoundingClientRect()
+    dragging.current = 'pan'
+    panAnchor.current = { mouseX: e.touches[0].clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }
+  }
+
   function handlePlayheadMouseDown(e: React.MouseEvent) {
     dragging.current = 'playhead'
     e.preventDefault()
+    e.stopPropagation()
+  }
+
+  function handlePlayheadTouchStart(e: React.TouchEvent) {
+    dragging.current = 'playhead'
     e.stopPropagation()
   }
 
@@ -265,9 +311,10 @@ function TripTimeline({
     <div
       ref={containerRef}
       className="relative select-none overflow-hidden rounded-xl border border-surface-border"
-      style={{ height: 72, backgroundColor: 'rgba(0,0,0,0.35)', cursor: 'grab' }}
+      style={{ height: 72, backgroundColor: 'rgba(0,0,0,0.35)', cursor: 'grab', touchAction: 'none' }}
       onWheel={handleWheel}
       onMouseDown={handleContainerMouseDown}
+      onTouchStart={handleContainerTouchStart}
     >
       {/* Past zone shading */}
       <div
@@ -401,6 +448,7 @@ function TripTimeline({
           zIndex: 10,
         }}
         onMouseDown={handlePlayheadMouseDown}
+        onTouchStart={handlePlayheadTouchStart}
       />
 
       {/* Hint */}
@@ -722,7 +770,7 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
           value={stop.flag}
           onChange={(e) => onUpdate({ ...stop, flag: e.target.value })}
           className="text-2xl mt-0.5 bg-transparent outline-none w-10 shrink-0"
-          maxLength={2}
+          maxLength={8}
           title="Flag emoji"
         />
         <div className="flex-1 min-w-0">

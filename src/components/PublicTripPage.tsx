@@ -194,9 +194,46 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
       }
       dragging.current = null; panAnchor.current = null
     }
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging.current || !containerRef.current) return
+      e.preventDefault()
+      const rect = containerRef.current.getBoundingClientRect()
+      const x = e.touches[0].clientX - rect.left
+      const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+      if (dragging.current === 'playhead') {
+        cbRef.current.onPlayheadChange(Math.max(tripStartMs, Math.min(tripEndMs, vs + (x / w) * (ve - vs))))
+      } else if (dragging.current === 'pan' && panAnchor.current) {
+        const { mouseX, viewStart, viewEnd } = panAnchor.current
+        const msPerPx = (viewEnd - viewStart) / w
+        const delta = (mouseX - x) * msPerPx
+        let ns = viewStart + delta, ne = viewEnd + delta
+        if (ns < tripStartMs) { ne += tripStartMs - ns; ns = tripStartMs }
+        if (ne > tripEndMs) { ns -= ne - tripEndMs; ne = tripEndMs }
+        cbRef.current.onViewChange(Math.max(tripStartMs, ns), Math.min(tripEndMs, ne))
+      }
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (dragging.current === 'pan' && panAnchor.current && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const dist = Math.abs((e.changedTouches[0].clientX - rect.left) - panAnchor.current.mouseX)
+        if (dist < 5) {
+          const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+          const ms = vs + (panAnchor.current.mouseX / w) * (ve - vs)
+          cbRef.current.onPlayheadChange(Math.max(tripStartMs, Math.min(tripEndMs, ms)))
+        }
+      }
+      dragging.current = null; panAnchor.current = null
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-    return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
+    }
   }, [tripStartMs, tripEndMs])
 
   function handleWheel(e: React.WheelEvent) {
@@ -227,9 +264,10 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', height: 72, flexShrink: 0, backgroundColor: 'rgba(0,0,0,0.35)', borderTop: '1px solid rgba(255,255,255,0.06)', cursor: 'grab', userSelect: 'none', overflow: 'visible' }}
+      style={{ position: 'relative', height: 72, flexShrink: 0, backgroundColor: 'rgba(0,0,0,0.35)', borderTop: '1px solid rgba(255,255,255,0.06)', cursor: 'grab', userSelect: 'none', overflow: 'visible', touchAction: 'none' }}
       onWheel={handleWheel}
       onMouseDown={(e) => { const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }; e.preventDefault() }}
+      onTouchStart={(e) => { const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.touches[0].clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs } }}
     >
       {/* Past zone */}
       <div style={{ position: 'absolute', top: 0, bottom: 0, left: Math.max(0, msToX(tripStartMs)), width: Math.max(0, Math.min(playheadX, containerWidth) - Math.max(0, msToX(tripStartMs))), backgroundColor: `${accent}10`, pointerEvents: 'none' }} />
@@ -296,6 +334,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
           <div
             style={{ position: 'absolute', top: -34, left: playheadX - 24, width: 48, height: 48, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 14px ${accent}c0`, zIndex: 2000, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
             onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
+            onTouchStart={(e) => { dragging.current = 'playhead'; e.stopPropagation() }}
           >
             <img src={faceSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           </div>
