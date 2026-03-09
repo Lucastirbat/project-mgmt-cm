@@ -11,7 +11,7 @@ const SESSION_COOKIE = 'pm_session'
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
 
 // Paths that bypass auth entirely
-const PUBLIC_PATHS = new Set(['/login', '/api/login', '/trip', '/trip/friends'])
+const PUBLIC_PATHS = new Set(['/login', '/api/login', '/trip', '/trip/friends', '/api/og-image'])
 // Embed paths are always public (iframed on external sites)
 const isPublicEmbed = (path: string) =>
   path.startsWith('/embed/') || path.startsWith('/api/embed/') || path.startsWith('/api/trip/')

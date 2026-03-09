@@ -310,6 +310,8 @@ export default function PublicTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
+  const [eventImages, setEventImages] = useState<Record<string, string>>({})
+  const fetchedIds = useRef<Set<string>>(new Set())
 
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
   const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
@@ -341,6 +343,21 @@ export default function PublicTripPage() {
 
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
   const panelStop = getStopAtPlayhead(stops, playheadMs)
+
+  // Fetch og:image covers for events in the current stop
+  useEffect(() => {
+    if (!panelStop) return
+    panelStop.events.forEach((ev) => {
+      if (!ev.link || fetchedIds.current.has(ev.id)) return
+      fetchedIds.current.add(ev.id)
+      fetch(`/api/og-image?url=${encodeURIComponent(ev.link)}`)
+        .then((r) => r.json())
+        .then((d: { imageUrl: string | null }) => {
+          if (d.imageUrl) setEventImages((prev) => ({ ...prev, [ev.id]: d.imageUrl! }))
+        })
+        .catch(() => {})
+    })
+  }, [panelStop?.id])
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
   const travelerPos = getTravelerPos(stops, playheadMs)
 
@@ -435,10 +452,13 @@ export default function PublicTripPage() {
                 ? <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontStyle: 'italic' }}>No events scheduled</div>
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {panelStop.events.map((ev) => (
-                      <div key={ev.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '9px 11px' }}>
-                        <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
-                        {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
-                        {ev.link && <a href={ev.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 5, color: '#818cf8', fontSize: 10, textDecoration: 'none' }}>View event →</a>}
+                      <div key={ev.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, overflow: 'hidden' }}>
+                        {eventImages[ev.id] && <img src={eventImages[ev.id]} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} />}
+                        <div style={{ padding: '9px 11px' }}>
+                          <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
+                          {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
+                          {ev.link && <a href={ev.link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 5, color: '#818cf8', fontSize: 10, textDecoration: 'none' }}>View event →</a>}
+                        </div>
                       </div>
                     ))}
                   </div>
