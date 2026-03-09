@@ -152,7 +152,7 @@ function TripTimeline({
 
   function handleWheel(e: React.WheelEvent) {
     e.preventDefault()
-    const factor = e.deltaY > 0 ? 1.25 : 0.8
+    const factor = e.deltaY > 0 ? 1.08 : 1 / 1.08
     const rect = containerRef.current!.getBoundingClientRect()
     const mouseX = e.clientX - rect.left
     const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
@@ -383,121 +383,85 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         </div>
       )}
 
-      {/* Map + sidebar row */}
-      <div className="flex gap-3" style={{ height: 390 }}>
-        {/* Left stop list */}
-        <div className="w-52 shrink-0 overflow-y-auto space-y-0.5 pr-1">
-          {stops.map((stop) => {
-            const status = stopStatus(stop)
-            const isSelected = stop.id === selectedId
-            const reached = dateToMs(stop.arrivalDate) <= playheadMs
-            return (
-              <button
-                key={stop.id}
-                onClick={() => setSelectedId(stop.id)}
-                className={[
-                  'w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-2.5',
-                  isSelected ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80',
-                ].join(' ')}
-              >
-                <span className="shrink-0 text-base">{stop.flag}</span>
-                <div className="flex-1 min-w-0">
-                  <div
-                    className={[
-                      'text-sm font-medium truncate transition-colors',
-                      status === 'past' ? 'line-through opacity-40' : '',
-                      reached ? 'text-accent' : '',
-                    ].join(' ')}
-                  >
-                    {stop.capital}
-                  </div>
-                  <div className="text-[10px] text-white/25 mt-0.5">
-                    {formatDateRange(stop.arrivalDate, stop.departureDate)}
-                  </div>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {stop.events.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/8 text-white/40">
-                      {stop.events.length}ev
+      {/* Map */}
+      <div className="relative rounded-xl overflow-hidden border border-surface-border" style={{ height: 390 }}>
+        {isClient && (
+          <MapContainer
+            center={mapCenter}
+            zoom={4}
+            style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
+            zoomControl={true}
+            attributionControl={false}
+          >
+            <TileLayer
+              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution='&copy; OpenStreetMap &copy; CARTO'
+            />
+
+            {/* Route segments: highlight those reached by the playhead */}
+            {stops.slice(1).map((stop, i) => {
+              const prev = stops[i]
+              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              return (
+                <Polyline
+                  key={`seg-${i}`}
+                  positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]}
+                  pathOptions={{
+                    color: reached ? '#6366f1' : '#ffffff',
+                    weight: reached ? 2.5 : 1.5,
+                    opacity: reached ? 0.75 : 0.18,
+                    dashArray: reached ? undefined : '4 6',
+                  }}
+                />
+              )
+            })}
+
+            {/* City markers */}
+            {stops.map((stop) => {
+              const status = stopStatus(stop)
+              const isSelected = stop.id === selectedId
+              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              const color =
+                status === 'current' ? '#6366f1' : reached ? '#a78bfa' : '#4b5563'
+              const radius = status === 'current' ? 10 : isSelected ? 9 : 7
+
+              return (
+                <CircleMarker
+                  key={stop.id}
+                  center={[stop.lat, stop.lng]}
+                  radius={radius}
+                  pathOptions={{
+                    fillColor: color,
+                    fillOpacity: reached ? 0.9 : 0.4,
+                    color: isSelected ? '#ffffff' : color,
+                    weight: isSelected ? 2 : 1,
+                  }}
+                  eventHandlers={{ click: () => setSelectedId(stop.id) }}
+                >
+                  <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
+                    <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
+                      {stop.flag} {stop.capital}
                     </span>
-                  )}
-                  {stop.contacts.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/8 text-white/40">
-                      {stop.contacts.length}cx
-                    </span>
-                  )}
-                </div>
-              </button>
-            )
-          })}
-        </div>
+                  </Tooltip>
+                </CircleMarker>
+              )
+            })}
+          </MapContainer>
+        )}
 
-        {/* Map */}
-        <div className="flex-1 rounded-xl overflow-hidden border border-surface-border">
-          {isClient && (
-            <MapContainer
-              center={mapCenter}
-              zoom={4}
-              style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
-              zoomControl={true}
-              attributionControl={false}
-            >
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; OpenStreetMap &copy; CARTO'
-              />
-
-              {/* Route segments: highlight those reached by the playhead */}
-              {stops.slice(1).map((stop, i) => {
-                const prev = stops[i]
-                const reached = dateToMs(stop.arrivalDate) <= playheadMs
-                return (
-                  <Polyline
-                    key={`seg-${i}`}
-                    positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]}
-                    pathOptions={{
-                      color: reached ? '#6366f1' : '#ffffff',
-                      weight: reached ? 2.5 : 1.5,
-                      opacity: reached ? 0.75 : 0.18,
-                      dashArray: reached ? undefined : '4 6',
-                    }}
-                  />
-                )
-              })}
-
-              {/* City markers */}
-              {stops.map((stop) => {
-                const status = stopStatus(stop)
-                const isSelected = stop.id === selectedId
-                const reached = dateToMs(stop.arrivalDate) <= playheadMs
-                const color =
-                  status === 'current' ? '#6366f1' : reached ? '#a78bfa' : '#4b5563'
-                const radius = status === 'current' ? 10 : isSelected ? 9 : 7
-
-                return (
-                  <CircleMarker
-                    key={stop.id}
-                    center={[stop.lat, stop.lng]}
-                    radius={radius}
-                    pathOptions={{
-                      fillColor: color,
-                      fillOpacity: reached ? 0.9 : 0.4,
-                      color: isSelected ? '#ffffff' : color,
-                      weight: isSelected ? 2 : 1,
-                    }}
-                    eventHandlers={{ click: () => setSelectedId(stop.id) }}
-                  >
-                    <Tooltip direction="top" offset={[0, -8]} opacity={0.9}>
-                      <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
-                        {stop.flag} {stop.capital}
-                      </span>
-                    </Tooltip>
-                  </CircleMarker>
-                )
-              })}
-            </MapContainer>
-          )}
-        </div>
+        {/* Left detail card overlay */}
+        {selectedStop && (
+          <div
+            className="absolute top-3 left-3 bottom-3 w-72 z-[1000] overflow-y-auto rounded-xl"
+            style={{
+              background: 'rgba(15,15,15,0.93)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <StopDetail stop={selectedStop} onUpdate={updateStop} onClose={() => setSelectedId(null)} />
+          </div>
+        )}
       </div>
 
       {/* Timeline scrubber */}
@@ -514,15 +478,13 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         />
       )}
 
-      {/* Selected stop detail */}
-      {selectedStop && <StopDetail stop={selectedStop} onUpdate={updateStop} />}
     </div>
   )
 }
 
 // ─── Stop Detail Panel ────────────────────────────────────────────────────────
 
-function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop) => void }) {
+function StopDetail({ stop, onUpdate, onClose }: { stop: TripStop; onUpdate: (s: TripStop) => void; onClose?: () => void }) {
   const status = stopStatus(stop)
 
   function addEvent() {
@@ -554,25 +516,35 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
   }
 
   return (
-    <div className="rounded-xl border border-surface-border bg-white/[0.02] p-5 space-y-5">
-      <div className="flex items-center gap-3">
-        <span className="text-3xl">{stop.flag}</span>
-        <div>
-          <h3 className="text-white font-semibold text-lg leading-tight">
+    <div className="p-4 space-y-4">
+      <div className="flex items-start gap-3">
+        <span className="text-2xl mt-0.5">{stop.flag}</span>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-white font-semibold text-base leading-tight">
             {stop.capital}
             {status === 'current' && (
-              <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-accent/20 text-accent">
+              <span className="ml-2 text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-accent/20 text-accent">
                 Here now
               </span>
             )}
           </h3>
-          <p className="text-white/35 text-sm">
+          <p className="text-white/35 text-xs mt-0.5">
             {stop.country} · {formatDateRange(stop.arrivalDate, stop.departureDate)}
           </p>
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="shrink-0 text-white/25 hover:text-white/60 transition-colors mt-0.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="space-y-4">
         {/* Events */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
