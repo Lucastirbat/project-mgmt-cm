@@ -648,6 +648,51 @@ function StopDetail({ stop, onUpdate, onClose }: { stop: TripStop; onUpdate: (s:
         )}
       </div>
 
+      {/* Transport + times */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-white/35 text-[10px] font-semibold uppercase tracking-wider w-16">Arrives via</span>
+          <div className="flex gap-1">
+            {(['plane', 'bus', 'car'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => onUpdate({ ...stop, transport: stop.transport === mode ? undefined : mode })}
+                className="text-xs px-2 py-0.5 rounded-md border transition-colors"
+                style={{
+                  background: stop.transport === mode ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.03)',
+                  borderColor: stop.transport === mode ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)',
+                  color: stop.transport === mode ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                }}
+              >
+                {{ plane: '✈️ plane', bus: '🚌 bus', car: '🚗 car' }[mode]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-1">
+            <span className="text-white/30 text-[10px] w-16">Arrival time</span>
+            <input
+              type="time"
+              value={stop.arrivalTime ?? ''}
+              onChange={(e) => onUpdate({ ...stop, arrivalTime: e.target.value || undefined })}
+              className="bg-transparent text-white/50 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors"
+              style={{ colorScheme: 'dark' }}
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <span className="text-white/30 text-[10px] w-16">Depart time</span>
+            <input
+              type="time"
+              value={stop.departureTime ?? ''}
+              onChange={(e) => onUpdate({ ...stop, departureTime: e.target.value || undefined })}
+              className="bg-transparent text-white/50 text-xs outline-none border-b border-white/10 focus:border-white/25 transition-colors"
+              style={{ colorScheme: 'dark' }}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-4">
         {/* Events */}
         <div className="space-y-3">
