@@ -337,15 +337,19 @@ function TripTimeline({
 function MapEffects({ styleId }: { styleId: string }) {
   const map = useMap()
   useEffect(() => {
-    // Custom scroll zoom: exactly 1 zoom level per scroll tick, debounced
-    let busy = false
+    // Debounced scroll zoom: collect all wheel events within 100ms, apply ±1 step once
+    let accDir = 0
+    let timer: ReturnType<typeof setTimeout> | null = null
     const container = map.getContainer()
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      if (busy) return
-      busy = true
-      map.setZoom(map.getZoom() + (e.deltaY > 0 ? -1 : 1))
-      setTimeout(() => { busy = false }, 350)
+      accDir += e.deltaY > 0 ? -1 : 1
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (accDir !== 0) map.setZoom(map.getZoom() + Math.sign(accDir))
+        accDir = 0
+        timer = null
+      }, 100)
     }
     container.addEventListener('wheel', onWheel, { passive: false })
 
