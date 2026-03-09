@@ -904,6 +904,15 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
           )}
         </div>
 
+        {/* Event suggestions from friends */}
+        <div className="space-y-3">
+          <h4 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Event suggestions</h4>
+          <EventSuggestions
+            stop={stop}
+            onAccept={(ev) => onUpdate({ ...stop, events: [...stop.events, ev] })}
+          />
+        </div>
+
         {/* Friend responses to needs */}
         {stop.needs && stop.needs.length > 0 && (
           <div className="space-y-3">
@@ -912,6 +921,80 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Event Suggestions (admin review) ────────────────────────────────────────
+
+interface SuggestedEvent {
+  id: string; stopId: string; stopLabel: string
+  title: string; date?: string; location?: string; link?: string; notes?: string
+  submittedBy: string; contact?: string; submittedAt: string
+}
+
+function EventSuggestions({ stop, onAccept }: { stop: TripStop; onAccept: (ev: TripEvent) => void }) {
+  const [suggestions, setSuggestions] = useState<SuggestedEvent[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  function load() {
+    fetch('/api/trip/suggest-event')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: SuggestedEvent[]) => {
+        setSuggestions(data.filter(s => s.stopId === stop.id))
+        setLoaded(true)
+      })
+      .catch(() => setLoaded(true))
+  }
+
+  useEffect(() => { load() }, [stop.id])
+
+  async function accept(s: SuggestedEvent) {
+    const newEvent: TripEvent = {
+      id: `ev-${uid()}`,
+      title: s.title,
+      date: s.date,
+      location: s.location,
+      link: s.link,
+      notes: s.notes ? `${s.notes}\n\n— Suggested by ${s.submittedBy}${s.contact ? ` (${s.contact})` : ''}` : `— Suggested by ${s.submittedBy}${s.contact ? ` (${s.contact})` : ''}`,
+      private: true,
+    }
+    onAccept(newEvent)
+    await dismiss(s.id)
+  }
+
+  async function dismiss(id: string) {
+    await fetch(`/api/trip/suggest-event?id=${id}`, { method: 'DELETE' })
+    setSuggestions(prev => prev.filter(s => s.id !== id))
+  }
+
+  if (!loaded) return <p className="text-white/20 text-xs italic">Loading…</p>
+  if (!suggestions.length) return <p className="text-white/20 text-xs italic">No suggestions yet</p>
+
+  return (
+    <div className="space-y-2">
+      {suggestions.map(s => (
+        <div key={s.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-white/80 text-xs font-medium leading-snug">{s.title}</span>
+            <span className="text-white/20 text-[9px] shrink-0 mt-0.5">{new Date(s.submittedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span>
+          </div>
+          {(s.date || s.location) && (
+            <div className="text-white/35 text-[10px]">{[s.date, s.location].filter(Boolean).join(' · ')}</div>
+          )}
+          {s.link && <a href={s.link} target="_blank" rel="noopener noreferrer" className="text-accent text-[10px] hover:underline block truncate">{s.link}</a>}
+          {s.notes && <div className="text-white/30 text-[10px] italic">{s.notes}</div>}
+          <div className="text-white/40 text-[10px]">by {s.submittedBy}{s.contact ? ` · ${s.contact}` : ''}</div>
+          <div className="flex gap-2 pt-0.5">
+            <button onClick={() => accept(s)} className="text-[10px] px-2 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors">
+              Accept → add to stop
+            </button>
+            <button onClick={() => dismiss(s.id)} className="text-[10px] px-2 py-0.5 rounded border border-white/10 bg-white/3 text-white/30 hover:text-white/50 transition-colors">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

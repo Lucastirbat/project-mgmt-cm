@@ -318,6 +318,10 @@ export default function FriendsTripPage() {
   // offer form state keyed by `${stopId}-${need}`
   const [offerForms, setOfferForms] = useState<Record<string, { name: string; contact: string; note: string }>>({})
   const [submitState, setSubmitState] = useState<Record<string, 'idle' | 'sending' | 'done' | 'error'>>({})
+  // event suggestion state per stop
+  const [suggestOpen, setSuggestOpen] = useState<Record<string, boolean>>({})
+  const [suggestForms, setSuggestForms] = useState<Record<string, { title: string; date: string; location: string; link: string; notes: string; name: string; contact: string }>>({})
+  const [suggestState, setSuggestState] = useState<Record<string, 'idle' | 'sending' | 'done' | 'error'>>({})
 
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
   const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
@@ -563,6 +567,81 @@ export default function FriendsTripPage() {
                     ))}
                   </div>
               }
+
+              {/* Suggest an event */}
+              {(() => {
+                const sid = panelStop.id
+                const open = suggestOpen[sid] ?? false
+                const form = suggestForms[sid] ?? { title: '', date: '', location: '', link: '', notes: '', name: '', contact: '' }
+                const state = suggestState[sid] ?? 'idle'
+                const setField = (f: keyof typeof form, v: string) =>
+                  setSuggestForms(o => ({ ...o, [sid]: { ...form, [f]: v } }))
+                const canSubmit = form.title.trim() && form.name.trim() && state === 'idle'
+                const stop = panelStop
+
+                async function submitSuggestion() {
+                  setSuggestState(s => ({ ...s, [sid]: 'sending' }))
+                  try {
+                    const res = await fetch('/api/trip/suggest-event', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        stopId: stop.id,
+                        stopLabel: `${stop.flag} ${stop.capital}`,
+                        title: form.title.trim(),
+                        date: form.date.trim() || undefined,
+                        location: form.location.trim() || undefined,
+                        link: form.link.trim() || undefined,
+                        notes: form.notes.trim() || undefined,
+                        submittedBy: form.name.trim(),
+                        contact: form.contact.trim() || undefined,
+                      }),
+                    })
+                    setSuggestState(s => ({ ...s, [sid]: res.ok ? 'done' : 'error' }))
+                  } catch {
+                    setSuggestState(s => ({ ...s, [sid]: 'error' }))
+                  }
+                }
+
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    {state === 'done' ? (
+                      <div style={{ color: '#86efac', fontSize: 11, padding: '6px 0' }}>✓ Event suggestion sent! It'll appear once approved.</div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setSuggestOpen(o => ({ ...o, [sid]: !open }))}
+                          style={{ fontSize: 10, color: open ? ACCENT : 'rgba(255,255,255,0.3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, marginBottom: open ? 8 : 0 }}
+                        >
+                          <span style={{ fontSize: 12 }}>{open ? '−' : '+'}</span>
+                          Suggest an event
+                        </button>
+                        {open && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 10, padding: '10px 11px' }}>
+                            <input value={form.title} onChange={e => setField('title', e.target.value)} placeholder="Event title *" style={inputStyle} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                              <input value={form.date} onChange={e => setField('date', e.target.value)} placeholder="Date" style={inputStyle} />
+                              <input value={form.location} onChange={e => setField('location', e.target.value)} placeholder="Location" style={inputStyle} />
+                            </div>
+                            <input value={form.link} onChange={e => setField('link', e.target.value)} placeholder="Link (optional)" style={inputStyle} />
+                            <textarea value={form.notes} onChange={e => setField('notes', e.target.value)} placeholder="Notes (optional)" rows={2} style={{ ...inputStyle, resize: 'none' }} />
+                            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 0' }} />
+                            <input value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Your name *" style={inputStyle} />
+                            <input value={form.contact} onChange={e => setField('contact', e.target.value)} placeholder="Your contact (optional)" style={inputStyle} />
+                            <button
+                              disabled={!canSubmit}
+                              onClick={submitSuggestion}
+                              style={{ alignSelf: 'flex-start', fontSize: 10, padding: '4px 10px', borderRadius: 5, border: `1px solid rgba(245,158,11,0.35)`, background: canSubmit ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.05)', color: state === 'error' ? '#f87171' : ACCENT, cursor: canSubmit ? 'pointer' : 'default', opacity: canSubmit ? 1 : 0.5 }}
+                            >
+                              {state === 'sending' ? 'Sending…' : state === 'error' ? 'Error — retry' : 'Submit suggestion'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
 
               {panelStop.contacts.length > 0 && (
                 <>
