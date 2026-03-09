@@ -334,18 +334,33 @@ function TripTimeline({
 
 // ─── Map effects: slower scroll zoom + CSS path transitions ──────────────────
 
-function MapEffects() {
+function MapEffects({ styleId }: { styleId: string }) {
   const map = useMap()
   useEffect(() => {
-    const handler = (map as unknown as Record<string, { options?: { wheelPxPerZoomLevel?: number } }>)['scrollWheelZoom']
-    if (handler?.options) handler.options.wheelPxPerZoomLevel = 300
+    // Custom scroll zoom: exactly 1 zoom level per scroll tick, debounced
+    let busy = false
+    const container = map.getContainer()
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (busy) return
+      busy = true
+      map.setZoom(map.getZoom() + (e.deltaY > 0 ? -1 : 1))
+      setTimeout(() => { busy = false }, 350)
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
+
+    // CSS transitions for smooth route colour changes
     const style = document.createElement('style')
-    style.id = 'trip-map-transitions'
+    style.id = styleId
     style.textContent =
       '.leaflet-overlay-pane path { transition: stroke 0.4s ease, stroke-opacity 0.35s ease, stroke-width 0.25s ease, fill 0.4s ease, fill-opacity 0.35s ease; }'
     document.head.appendChild(style)
-    return () => { document.getElementById('trip-map-transitions')?.remove() }
-  }, [map])
+
+    return () => {
+      container.removeEventListener('wheel', onWheel)
+      document.getElementById(styleId)?.remove()
+    }
+  }, [map, styleId])
   return null
 }
 
@@ -416,6 +431,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
           <MapContainer
             center={mapCenter}
             zoom={4}
+            scrollWheelZoom={false}
             style={{ height: '100%', width: '100%', background: '#0f0f0f' }}
             zoomControl={true}
             attributionControl={false}
@@ -424,7 +440,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               attribution='&copy; OpenStreetMap &copy; CARTO'
             />
-            <MapEffects />
+            <MapEffects styleId="trip-map-transitions" />
 
             {/* Route segments: highlight those reached by the playhead */}
             {stops.slice(1).map((stop, i) => {

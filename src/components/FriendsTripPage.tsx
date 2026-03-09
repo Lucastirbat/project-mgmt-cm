@@ -66,14 +66,25 @@ function fmt(d: string) {
 function MapEffects() {
   const map = useMap()
   useEffect(() => {
-    const handler = (map as unknown as Record<string, { options?: { wheelPxPerZoomLevel?: number } }>)['scrollWheelZoom']
-    if (handler?.options) handler.options.wheelPxPerZoomLevel = 300
+    let busy = false
+    const container = map.getContainer()
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (busy) return
+      busy = true
+      map.setZoom(map.getZoom() + (e.deltaY > 0 ? -1 : 1))
+      setTimeout(() => { busy = false }, 350)
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
     const style = document.createElement('style')
     style.id = 'friends-map-transitions'
     style.textContent =
       '.leaflet-overlay-pane path { transition: stroke 0.4s ease, stroke-opacity 0.35s ease, fill 0.4s ease, fill-opacity 0.35s ease; }'
     document.head.appendChild(style)
-    return () => { document.getElementById('friends-map-transitions')?.remove() }
+    return () => {
+      container.removeEventListener('wheel', onWheel)
+      document.getElementById('friends-map-transitions')?.remove()
+    }
   }, [map])
   return null
 }
@@ -244,6 +255,7 @@ export default function FriendsTripPage() {
           <MapContainer
             center={mapCenter}
             zoom={4}
+            scrollWheelZoom={false}
             style={{ height: '100%', width: '100%', background: '#0a0a0a' }}
             zoomControl={true}
             attributionControl={false}
