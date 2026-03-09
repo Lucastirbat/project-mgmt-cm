@@ -8,7 +8,7 @@ function memberColor(name: string): string {
   return MEMBER_COLORS[hash % MEMBER_COLORS.length]
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { data, saving } = useData()
   const navigate = useNavigate()
   const location = useLocation()
@@ -53,6 +53,13 @@ export default function Sidebar() {
         </div>
         <span className="text-white font-medium text-sm tracking-tight truncate">CM Projects</span>
         {saving && <span className="ml-auto text-white/20 text-[10px] shrink-0">saving…</span>}
+        {onClose && (
+          <button onClick={onClose} className="ml-auto md:hidden text-white/30 hover:text-white/60 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Nav */}

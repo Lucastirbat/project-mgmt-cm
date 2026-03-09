@@ -448,7 +448,7 @@ export default function FriendsTripPage() {
                     {panelStop.capital}
                     {stopStatus(panelStop) === 'current' && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 400, background: ACCENT_DIM, color: ACCENT, borderRadius: 20, padding: '2px 7px', border: `1px solid ${ACCENT_BORDER}` }}>Here now</span>}
                   </div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{panelStop.country} · {fmt(panelStop.arrivalDate)} – {fmt(panelStop.departureDate)}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 }}>{panelStop.country} · {fmt(panelStop.arrivalDate)} – {fmt(panelStop.departureDate)}</div>
                   {(panelStop.arrivalTime || panelStop.departureTime) && (
                     <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 2 }}>
                       {panelStop.arrivalTime && `Arrives ${fmtTime(panelStop.arrivalTime)}`}
@@ -673,6 +673,21 @@ export default function FriendsTripPage() {
           .trip-panel::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.2); border-radius: 2px; }
           .trip-panel::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.4); }
           .trip-panel { scrollbar-width: thin; scrollbar-color: rgba(245,158,11,0.2) transparent; }
+          @media (max-width: 639px) {
+            .trip-panel {
+              position: absolute !important;
+              top: auto !important;
+              left: 0 !important;
+              right: 0 !important;
+              bottom: 0 !important;
+              width: 100% !important;
+              height: 58% !important;
+              border-radius: 16px 16px 0 0 !important;
+              border-left: none !important;
+              border-right: none !important;
+              border-bottom: none !important;
+            }
+          }
         `}</style>
       </div>
 

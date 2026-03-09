@@ -210,7 +210,7 @@ export default function ChatPanel() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-5 z-50 w-96 max-h-[70vh] flex flex-col rounded-2xl border border-surface-border bg-surface shadow-2xl overflow-hidden animate-fade-in">
+        <div className="fixed bottom-20 inset-x-2 sm:inset-x-auto sm:right-5 sm:left-auto z-50 w-auto sm:w-96 max-h-[70vh] flex flex-col rounded-2xl border border-surface-border bg-surface shadow-2xl overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="px-4 py-3 border-b border-surface-border flex items-center gap-2.5">
             <div className="w-6 h-6 rounded-md bg-accent flex items-center justify-center shrink-0">
