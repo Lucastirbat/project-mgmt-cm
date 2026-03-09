@@ -351,7 +351,7 @@ export default function PublicTripPage() {
   const travelerPos = getTravelerPos(stops, playheadMs)
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
       {/* Map */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Loading map…</div>}
