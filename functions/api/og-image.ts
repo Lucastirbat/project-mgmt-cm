@@ -3,12 +3,39 @@
  * Extracts a cover image and proxies the bytes back.
  *
  * Strategy (in order):
- * 1. Direct HTML scrape (og:image / twitter:image / __NEXT_DATA__)
- * 2. microlink.io free API — handles JS-rendered pages & bot-protected sites (Luma)
- * 3. Return 204 if nothing found
+ * 1. Luma public API  — lu.ma/luma.com URLs → api.lu.ma/public/v1/event/get
+ * 2. Direct HTML scrape (og:image / twitter:image / __NEXT_DATA__)
+ * 3. microlink.io free API fallback
+ * 4. Return 204 if nothing found
  */
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+// ─── Luma API ────────────────────────────────────────────────────────────────
+
+function lumaSlug(rawUrl: string): string | null {
+  try {
+    const u = new URL(rawUrl)
+    if (u.hostname === 'lu.ma' || u.hostname === 'luma.com' || u.hostname === 'www.lu.ma' || u.hostname === 'www.luma.com') {
+      const slug = u.pathname.replace(/^\//, '').split('/')[0]
+      return slug || null
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
+async function fetchViaLumaApi(slug: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.lu.ma/public/v1/event/get?url=${encodeURIComponent(slug)}`, {
+      headers: { Accept: 'application/json', 'User-Agent': UA },
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { event?: { cover_url?: string; cover?: string }; cover_url?: string }
+    return data?.event?.cover_url ?? data?.event?.cover ?? data?.cover_url ?? null
+  } catch {
+    return null
+  }
+}
 
 // ─── HTML extraction ──────────────────────────────────────────────────────────
 
@@ -25,7 +52,6 @@ function extractFromHtml(html: string): string | null {
     const m = html.match(p)
     if (m?.[1]?.startsWith('http')) return m[1]
   }
-  // Next.js __NEXT_DATA__ (Luma stores cover here)
   const nd = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/)
   if (nd) {
     try { return findImgInObj(JSON.parse(nd[1])) } catch { /* ignore */ }
@@ -47,7 +73,7 @@ function findImgInObj(obj: unknown, depth = 0): string | null {
   return null
 }
 
-// ─── microlink.io fallback ────────────────────────────────────────────────────
+// ─── microlink.io fallback ─────────────────────────────────────────────────────
 
 async function fetchViaMicrolink(eventUrl: string): Promise<string | null> {
   try {
@@ -70,25 +96,31 @@ export const onRequestGet: PagesFunction = async (context) => {
 
   let imageUrl: string | null = null
 
-  try {
-    // 1. Direct HTML scrape
-    const pageRes = await fetch(rawUrl, {
-      headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' },
-      redirect: 'follow',
-    })
-    if (pageRes.ok) {
-      imageUrl = extractFromHtml(await pageRes.text())
-    }
-  } catch { /* fall through to microlink */ }
+  // 1. Luma-specific API (bypasses HTML scraping entirely)
+  const slug = lumaSlug(rawUrl)
+  if (slug) {
+    imageUrl = await fetchViaLumaApi(slug)
+  }
 
-  // 2. microlink.io fallback (handles JS-rendered pages + bot-blocked sites)
+  // 2. Direct HTML scrape
+  if (!imageUrl) {
+    try {
+      const pageRes = await fetch(rawUrl, {
+        headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9' },
+        redirect: 'follow',
+      })
+      if (pageRes.ok) imageUrl = extractFromHtml(await pageRes.text())
+    } catch { /* fall through */ }
+  }
+
+  // 3. microlink.io fallback
   if (!imageUrl) {
     imageUrl = await fetchViaMicrolink(rawUrl)
   }
 
   if (!imageUrl) return new Response(null, { status: 204 })
 
-  // 3. Proxy the image bytes
+  // 4. Proxy the image bytes back to the browser
   try {
     const imgRes = await fetch(imageUrl, {
       headers: { 'User-Agent': UA, Referer: rawUrl },
