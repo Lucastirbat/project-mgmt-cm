@@ -17,7 +17,7 @@ interface TripContact {
 
 interface TripEvent {
   id: string; title: string; date?: string; location?: string
-  link?: string; sponsorSlot?: string; notes?: string
+  link?: string; imageUrl?: string; sponsorSlot?: string; notes?: string
 }
 
 interface TripStop {
@@ -319,6 +319,11 @@ export default function FriendsTripPage() {
     }
   }, [stops.length])
 
+  // Preload all face images so they're cached before the playhead crosses 33%/66%
+  useEffect(() => {
+    ;['/face1.png', '/face2.png', '/face3.png'].forEach((src) => { const img = new Image(); img.src = src })
+  }, [])
+
   useEffect(() => {
     setIsClient(true)
     fetch('/api/trip/friends-data')
@@ -421,7 +426,7 @@ export default function FriendsTripPage() {
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                     {panelStop.events.map((ev) => (
                       <div key={ev.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
-                        {ev.link && <img src={`/api/og-image?url=${encodeURIComponent(ev.link)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                        {(ev.imageUrl || ev.link) && <img src={ev.imageUrl ?? `/api/og-image?url=${encodeURIComponent(ev.link!)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                         <div style={{ padding: '9px 11px' }}>
                           <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
                           {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}

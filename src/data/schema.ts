@@ -49,6 +49,7 @@ export interface TripEvent {
   date?: string
   location?: string
   link?: string
+  imageUrl?: string   // manual cover image override (bypasses og:image proxy)
   sponsorSlot?: string
   notes?: string
 }
