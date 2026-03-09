@@ -258,7 +258,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
         const faceSrc = progress < 1/3 ? '/face1.png' : progress < 2/3 ? '/face2.png' : '/face3.png'
         return (
           <div
-            style={{ position: 'absolute', top: -34, left: playheadX - 24, width: 48, height: 48, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 14px ${accent}c0`, zIndex: 10, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
+            style={{ position: 'absolute', top: -34, left: playheadX - 24, width: 48, height: 48, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 14px ${accent}c0`, zIndex: 2000, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
             onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
           >
             <img src={faceSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -336,7 +336,7 @@ export default function FriendsTripPage() {
   const travelerPos = getTravelerPos(stops, playheadMs)
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderBottom: `1px solid rgba(245,158,11,0.12)`, flexShrink: 0, background: '#0d0d0d' }}>
         <span style={{ fontSize: 22 }}>🧭</span>
