@@ -330,27 +330,10 @@ export default function FriendsTripPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const [eventImages, setEventImages] = useState<Record<string, string>>({})
-  const fetchedIds = useRef<Set<string>>(new Set())
-
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
   const panelStop = getStopAtPlayhead(stops, playheadMs)
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
   const travelerPos = getTravelerPos(stops, playheadMs)
-
-  useEffect(() => {
-    if (!panelStop) return
-    panelStop.events.forEach((ev) => {
-      if (!ev.link || fetchedIds.current.has(ev.id)) return
-      fetchedIds.current.add(ev.id)
-      fetch(`/api/og-image?url=${encodeURIComponent(ev.link)}`)
-        .then((r) => r.json())
-        .then((d: { imageUrl: string | null }) => {
-          if (d.imageUrl) setEventImages((prev) => ({ ...prev, [ev.id]: d.imageUrl! }))
-        })
-        .catch(() => {})
-    })
-  }, [panelStop?.id])
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
@@ -455,7 +438,7 @@ export default function FriendsTripPage() {
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                     {panelStop.events.map((ev) => (
                       <div key={ev.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
-                        {eventImages[ev.id] && <img src={eventImages[ev.id]} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} />}
+                        {ev.link && <img src={`/api/og-image?url=${encodeURIComponent(ev.link)}`} alt="" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}
                         <div style={{ padding: '9px 11px' }}>
                           <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500, marginBottom: 3 }}>{ev.title || 'Untitled event'}</div>
                           {(ev.date || ev.location) && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[ev.date, ev.location].filter(Boolean).join(' · ')}</div>}
