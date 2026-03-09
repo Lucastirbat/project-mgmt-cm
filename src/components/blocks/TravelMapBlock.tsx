@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Block, TripStop, TripEvent, TripContact } from '../../data/schema'
@@ -26,6 +26,304 @@ function uid() {
   return Math.random().toString(36).slice(2, 9)
 }
 
+// Treat dates as local noon to sidestep timezone edge cases
+function dateToMs(dateStr: string): number {
+  return new Date(dateStr + 'T12:00:00').getTime()
+}
+
+// ─── Timeline constants ───────────────────────────────────────────────────────
+
+const MIN = 60_000
+const HOUR = 3_600_000
+const DAY = 86_400_000
+
+// ─── Timeline helpers ─────────────────────────────────────────────────────────
+
+function getTickConfig(visibleMs: number): {
+  major: number
+  minor: number
+  formatMajor: (d: Date) => string
+} {
+  if (visibleMs > 30 * DAY)
+    return { major: 7 * DAY, minor: DAY, formatMajor: (d) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) }
+  if (visibleMs > 5 * DAY)
+    return { major: DAY, minor: 6 * HOUR, formatMajor: (d) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) }
+  if (visibleMs > DAY)
+    return { major: 6 * HOUR, minor: HOUR, formatMajor: (d) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) }
+  if (visibleMs > 4 * HOUR)
+    return { major: HOUR, minor: 15 * MIN, formatMajor: (d) => d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) }
+  return {
+    major: 30 * MIN, minor: 5 * MIN,
+    formatMajor: (d) => d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }),
+  }
+}
+
+function getTicks(start: number, end: number, interval: number): number[] {
+  const first = Math.ceil(start / interval) * interval
+  const result: number[] = []
+  for (let t = first; t <= end; t += interval) result.push(t)
+  return result
+}
+
+function formatPlayheadLabel(ms: number, visibleMs: number): string {
+  const d = new Date(ms)
+  if (visibleMs > 3 * DAY) return d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
+  if (visibleMs > HOUR)
+    return d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+// ─── TripTimeline ─────────────────────────────────────────────────────────────
+
+function TripTimeline({
+  stops,
+  tripStartMs,
+  tripEndMs,
+  playheadMs,
+  viewStartMs,
+  viewEndMs,
+  onPlayheadChange,
+  onViewChange,
+}: {
+  stops: TripStop[]
+  tripStartMs: number
+  tripEndMs: number
+  playheadMs: number
+  viewStartMs: number
+  viewEndMs: number
+  onPlayheadChange: (ms: number) => void
+  onViewChange: (start: number, end: number) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(800)
+
+  // Keep callbacks and view state in refs so event listeners don't go stale
+  const cbRef = useRef({ onPlayheadChange, onViewChange })
+  cbRef.current = { onPlayheadChange, onViewChange }
+  const viewRef = useRef({ viewStartMs, viewEndMs, containerWidth })
+  viewRef.current = { viewStartMs, viewEndMs, containerWidth }
+
+  const dragging = useRef<'playhead' | 'pan' | null>(null)
+  const panAnchor = useRef<{ mouseX: number; viewStart: number; viewEnd: number } | null>(null)
+
+  useEffect(() => {
+    const update = () => setContainerWidth(containerRef.current?.clientWidth ?? 800)
+    update()
+    const ro = new ResizeObserver(update)
+    if (containerRef.current) ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  // Global mouse events for drag
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!dragging.current || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+
+      if (dragging.current === 'playhead') {
+        const ms = Math.max(tripStartMs, Math.min(tripEndMs, vs + (x / w) * (ve - vs)))
+        cbRef.current.onPlayheadChange(ms)
+      } else if (dragging.current === 'pan' && panAnchor.current) {
+        const { mouseX, viewStart, viewEnd } = panAnchor.current
+        const msPerPx = (viewEnd - viewStart) / w
+        const delta = (mouseX - x) * msPerPx
+        let ns = viewStart + delta
+        let ne = viewEnd + delta
+        if (ns < tripStartMs) { ne += tripStartMs - ns; ns = tripStartMs }
+        if (ne > tripEndMs) { ns -= ne - tripEndMs; ne = tripEndMs }
+        cbRef.current.onViewChange(Math.max(tripStartMs, ns), Math.min(tripEndMs, ne))
+      }
+    }
+
+    function onUp() {
+      dragging.current = null
+      panAnchor.current = null
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [tripStartMs, tripEndMs])
+
+  function handleWheel(e: React.WheelEvent) {
+    e.preventDefault()
+    const factor = e.deltaY > 0 ? 1.25 : 0.8
+    const rect = containerRef.current!.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+    const duration = ve - vs
+    const mouseMs = vs + (mouseX / w) * duration
+    const newDuration = Math.max(30 * MIN, Math.min(tripEndMs - tripStartMs, duration * factor))
+    const ratio = (mouseMs - vs) / duration
+    let ns = mouseMs - ratio * newDuration
+    let ne = mouseMs + (1 - ratio) * newDuration
+    if (ns < tripStartMs) { ne += tripStartMs - ns; ns = tripStartMs }
+    if (ne > tripEndMs) { ns -= ne - tripEndMs; ne = tripEndMs }
+    onViewChange(Math.max(tripStartMs, ns), Math.min(tripEndMs, ne))
+  }
+
+  function handleContainerMouseDown(e: React.MouseEvent) {
+    const rect = containerRef.current!.getBoundingClientRect()
+    dragging.current = 'pan'
+    panAnchor.current = { mouseX: e.clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }
+    e.preventDefault()
+  }
+
+  function handlePlayheadMouseDown(e: React.MouseEvent) {
+    dragging.current = 'playhead'
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  // Helpers that use current state (for render)
+  const visibleMs = viewEndMs - viewStartMs
+
+  function msToX(ms: number): number {
+    return ((ms - viewStartMs) / visibleMs) * containerWidth
+  }
+
+  const { major, minor, formatMajor } = getTickConfig(visibleMs)
+  const majorTicks = getTicks(viewStartMs, viewEndMs, major)
+  const majorSet = new Set(majorTicks)
+  const minorTicks = getTicks(viewStartMs, viewEndMs, minor).filter((t) => !majorSet.has(t))
+
+  const playheadX = msToX(playheadMs)
+  const todayX = msToX(Date.now())
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative select-none overflow-hidden rounded-xl border border-surface-border"
+      style={{ height: 72, backgroundColor: 'rgba(0,0,0,0.35)', cursor: 'grab' }}
+      onWheel={handleWheel}
+      onMouseDown={handleContainerMouseDown}
+    >
+      {/* Past zone shading */}
+      <div
+        className="absolute inset-y-0 pointer-events-none"
+        style={{
+          left: Math.max(0, msToX(tripStartMs)),
+          width: Math.max(0, Math.min(playheadX, containerWidth) - Math.max(0, msToX(tripStartMs))),
+          backgroundColor: 'rgba(99,102,241,0.07)',
+        }}
+      />
+
+      {/* Minor ticks */}
+      {minorTicks.map((t) => {
+        const x = msToX(t)
+        if (x < 0 || x > containerWidth) return null
+        return (
+          <div
+            key={t}
+            className="absolute bottom-0 pointer-events-none"
+            style={{ left: x, height: 10, borderLeft: '1px solid rgba(255,255,255,0.06)' }}
+          />
+        )
+      })}
+
+      {/* Major ticks + labels */}
+      {majorTicks.map((t) => {
+        const x = msToX(t)
+        if (x < 0 || x > containerWidth) return null
+        return (
+          <div key={t} className="absolute inset-y-0 pointer-events-none" style={{ left: x }}>
+            <div className="absolute inset-y-0" style={{ borderLeft: '1px solid rgba(255,255,255,0.12)' }} />
+            <span
+              className="absolute text-white/30"
+              style={{ top: 7, left: 4, fontSize: 9, whiteSpace: 'nowrap', lineHeight: 1 }}
+            >
+              {formatMajor(new Date(t))}
+            </span>
+          </div>
+        )
+      })}
+
+      {/* Today marker */}
+      {todayX >= 0 && todayX <= containerWidth && (
+        <div
+          className="absolute inset-y-0 pointer-events-none"
+          style={{ left: todayX, borderLeft: '1px dashed rgba(255,255,255,0.22)' }}
+        />
+      )}
+
+      {/* Stop arrival markers */}
+      {stops.map((stop) => {
+        const x = msToX(dateToMs(stop.arrivalDate))
+        if (x < -20 || x > containerWidth + 20) return null
+        const reached = dateToMs(stop.arrivalDate) <= playheadMs
+        return (
+          <div key={stop.id} className="absolute inset-y-0 pointer-events-none" style={{ left: x }}>
+            <div
+              className="absolute inset-y-0"
+              style={{ borderLeft: `1px solid ${reached ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.18)'}` }}
+            />
+            <span
+              style={{
+                position: 'absolute',
+                bottom: 7,
+                left: 4,
+                fontSize: 12,
+                lineHeight: 1,
+                opacity: reached ? 1 : 0.3,
+              }}
+            >
+              {stop.flag}
+            </span>
+          </div>
+        )
+      })}
+
+      {/* Playhead line */}
+      <div
+        className="absolute inset-y-0 pointer-events-none"
+        style={{ left: playheadX, borderLeft: '2px solid rgba(99,102,241,0.9)', zIndex: 5 }}
+      />
+
+      {/* Playhead label */}
+      <span
+        className="absolute text-white/70 pointer-events-none"
+        style={{ top: 20, left: playheadX + 6, fontSize: 8, whiteSpace: 'nowrap', lineHeight: 1, zIndex: 6 }}
+      >
+        {formatPlayheadLabel(playheadMs, visibleMs)}
+      </span>
+
+      {/* Draggable circle handle */}
+      <div
+        className="absolute pointer-events-auto"
+        title="Drag to scrub"
+        style={{
+          top: 0,
+          left: playheadX - 7,
+          width: 14,
+          height: 14,
+          borderRadius: '50%',
+          backgroundColor: '#6366f1',
+          border: '2.5px solid rgba(255,255,255,0.85)',
+          cursor: 'ew-resize',
+          boxShadow: '0 0 10px rgba(99,102,241,0.7)',
+          zIndex: 10,
+        }}
+        onMouseDown={handlePlayheadMouseDown}
+      />
+
+      {/* Hint */}
+      <span
+        className="absolute text-white/15 pointer-events-none"
+        style={{ bottom: 5, right: 7, fontSize: 8, lineHeight: 1 }}
+      >
+        scroll to zoom · drag to pan
+      </span>
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function TravelMapBlock({ block, onChange }: Props) {
   const stops: TripStop[] = block.tripStops ?? []
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -34,30 +332,35 @@ export default function TravelMapBlock({ block, onChange }: Props) {
   })
   const [isClient, setIsClient] = useState(false)
 
+  // Timeline state
+  const tripStartMs = stops.length ? dateToMs(stops[0].arrivalDate) : Date.now() - DAY
+  const tripEndMs = stops.length ? dateToMs(stops[stops.length - 1].departureDate) : Date.now() + DAY
+
+  const [playheadMs, setPlayheadMs] = useState<number>(() =>
+    Math.max(tripStartMs, Math.min(tripEndMs, Date.now())),
+  )
+  const [viewStartMs, setViewStartMs] = useState(tripStartMs)
+  const [viewEndMs, setViewEndMs] = useState(tripEndMs)
+
+  function handleViewChange(start: number, end: number) {
+    setViewStartMs(start)
+    setViewEndMs(end)
+  }
+
   useEffect(() => {
     setIsClient(true)
   }, [])
 
   const selectedStop = stops.find((s) => s.id === selectedId) ?? null
+  const currentStop = stops.find((s) => stopStatus(s) === 'current')
+  const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
 
   function updateStop(updated: TripStop) {
-    onChange({
-      ...block,
-      tripStops: stops.map((s) => (s.id === updated.id ? updated : s)),
-    })
+    onChange({ ...block, tripStops: stops.map((s) => (s.id === updated.id ? updated : s)) })
   }
 
-  const routePositions: [number, number][] = stops.map((s) => [s.lat, s.lng])
-
-  const currentStop = stops.find((s) => stopStatus(s) === 'current')
-
-  // Map center: current stop, or midpoint of Europe
-  const mapCenter: [number, number] = currentStop
-    ? [currentStop.lat, currentStop.lng]
-    : [50.0, 20.0]
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {/* Live status banner */}
       {currentStop && (
         <div
@@ -80,32 +383,30 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         </div>
       )}
 
-      {/* Main layout: timeline + map */}
-      <div className="flex gap-3" style={{ height: '460px' }}>
-        {/* Timeline */}
-        <div className="w-56 shrink-0 overflow-y-auto scrollbar-thin space-y-0.5 pr-1">
+      {/* Map + sidebar row */}
+      <div className="flex gap-3" style={{ height: 390 }}>
+        {/* Left stop list */}
+        <div className="w-52 shrink-0 overflow-y-auto space-y-0.5 pr-1">
           {stops.map((stop) => {
             const status = stopStatus(stop)
             const isSelected = stop.id === selectedId
+            const reached = dateToMs(stop.arrivalDate) <= playheadMs
             return (
               <button
                 key={stop.id}
                 onClick={() => setSelectedId(stop.id)}
                 className={[
-                  'w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-2.5 group',
-                  isSelected
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/50 hover:bg-white/5 hover:text-white/80',
+                  'w-full text-left px-3 py-2 rounded-xl transition-all flex items-center gap-2.5',
+                  isSelected ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80',
                 ].join(' ')}
               >
-                {/* Status indicator */}
                 <span className="shrink-0 text-base">{stop.flag}</span>
                 <div className="flex-1 min-w-0">
                   <div
                     className={[
-                      'text-sm font-medium truncate',
+                      'text-sm font-medium truncate transition-colors',
                       status === 'past' ? 'line-through opacity-40' : '',
-                      status === 'current' ? 'text-accent' : '',
+                      reached ? 'text-accent' : '',
                     ].join(' ')}
                   >
                     {stop.capital}
@@ -114,7 +415,6 @@ export default function TravelMapBlock({ block, onChange }: Props) {
                     {formatDateRange(stop.arrivalDate, stop.departureDate)}
                   </div>
                 </div>
-                {/* Indicators */}
                 <div className="flex gap-1 shrink-0">
                   {stop.events.length > 0 && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/8 text-white/40">
@@ -144,25 +444,34 @@ export default function TravelMapBlock({ block, onChange }: Props) {
             >
               <TileLayer
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                attribution='&copy; OpenStreetMap &copy; CARTO'
               />
 
-              {/* Route polyline */}
-              <Polyline
-                positions={routePositions}
-                pathOptions={{ color: '#ffffff', weight: 1.5, dashArray: '4 6', opacity: 0.2 }}
-              />
+              {/* Route segments: highlight those reached by the playhead */}
+              {stops.slice(1).map((stop, i) => {
+                const prev = stops[i]
+                const reached = dateToMs(stop.arrivalDate) <= playheadMs
+                return (
+                  <Polyline
+                    key={`seg-${i}`}
+                    positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]}
+                    pathOptions={{
+                      color: reached ? '#6366f1' : '#ffffff',
+                      weight: reached ? 2.5 : 1.5,
+                      opacity: reached ? 0.75 : 0.18,
+                      dashArray: reached ? undefined : '4 6',
+                    }}
+                  />
+                )
+              })}
 
               {/* City markers */}
               {stops.map((stop) => {
                 const status = stopStatus(stop)
                 const isSelected = stop.id === selectedId
+                const reached = dateToMs(stop.arrivalDate) <= playheadMs
                 const color =
-                  status === 'current'
-                    ? '#6366f1'
-                    : status === 'past'
-                    ? '#4b5563'
-                    : '#e5e7eb'
+                  status === 'current' ? '#6366f1' : reached ? '#a78bfa' : '#4b5563'
                 const radius = status === 'current' ? 10 : isSelected ? 9 : 7
 
                 return (
@@ -172,7 +481,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
                     radius={radius}
                     pathOptions={{
                       fillColor: color,
-                      fillOpacity: isSelected ? 1 : 0.75,
+                      fillOpacity: reached ? 0.9 : 0.4,
                       color: isSelected ? '#ffffff' : color,
                       weight: isSelected ? 2 : 1,
                     }}
@@ -191,10 +500,22 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         </div>
       </div>
 
-      {/* Selected city detail panel */}
-      {selectedStop && (
-        <StopDetail stop={selectedStop} onUpdate={updateStop} />
+      {/* Timeline scrubber */}
+      {stops.length >= 2 && (
+        <TripTimeline
+          stops={stops}
+          tripStartMs={tripStartMs}
+          tripEndMs={tripEndMs}
+          playheadMs={playheadMs}
+          viewStartMs={viewStartMs}
+          viewEndMs={viewEndMs}
+          onPlayheadChange={setPlayheadMs}
+          onViewChange={handleViewChange}
+        />
       )}
+
+      {/* Selected stop detail */}
+      {selectedStop && <StopDetail stop={selectedStop} onUpdate={updateStop} />}
     </div>
   )
 }
@@ -219,14 +540,7 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
 
   function addContact() {
     const newContact: TripContact = {
-      id: `cx-${uid()}`,
-      name: '',
-      role: '',
-      company: '',
-      linkedin: '',
-      email: '',
-      phone: '',
-      notes: '',
+      id: `cx-${uid()}`, name: '', role: '', company: '', linkedin: '', email: '', phone: '', notes: '',
     }
     onUpdate({ ...stop, contacts: [...stop.contacts, newContact] })
   }
@@ -241,7 +555,6 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
 
   return (
     <div className="rounded-xl border border-surface-border bg-white/[0.02] p-5 space-y-5">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <span className="text-3xl">{stop.flag}</span>
         <div>
@@ -264,17 +577,13 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Events</h4>
-            <button
-              onClick={addEvent}
-              className="text-xs text-accent hover:text-white/70 transition-colors flex items-center gap-1"
-            >
+            <button onClick={addEvent} className="text-xs text-accent hover:text-white/70 transition-colors flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add event
             </button>
           </div>
-
           {stop.events.length === 0 ? (
             <p className="text-white/20 text-xs italic">No events yet</p>
           ) : (
@@ -290,17 +599,13 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Contacts</h4>
-            <button
-              onClick={addContact}
-              className="text-xs text-accent hover:text-white/70 transition-colors flex items-center gap-1"
-            >
+            <button onClick={addContact} className="text-xs text-accent hover:text-white/70 transition-colors flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add contact
             </button>
           </div>
-
           {stop.contacts.length === 0 ? (
             <p className="text-white/20 text-xs italic">No contacts yet</p>
           ) : (
@@ -318,15 +623,7 @@ function StopDetail({ stop, onUpdate }: { stop: TripStop; onUpdate: (s: TripStop
 
 // ─── Event Card ───────────────────────────────────────────────────────────────
 
-function EventCard({
-  event,
-  onUpdate,
-  onDelete,
-}: {
-  event: TripEvent
-  onUpdate: (e: TripEvent) => void
-  onDelete: () => void
-}) {
+function EventCard({ event, onUpdate, onDelete }: { event: TripEvent; onUpdate: (e: TripEvent) => void; onDelete: () => void }) {
   return (
     <div className="group/ev rounded-lg border border-surface-border bg-white/[0.03] p-3 space-y-2">
       <div className="flex items-center gap-2">
@@ -334,65 +631,29 @@ function EventCard({
         <input
           value={event.title}
           onChange={(e) => onUpdate({ ...event, title: e.target.value })}
-          placeholder="Event name (e.g. Private Dinner)"
+          placeholder="Event name"
           className="flex-1 bg-transparent text-white/80 text-sm outline-none placeholder-white/20 border-b border-transparent focus:border-white/10 transition-colors"
         />
-        <button
-          onClick={onDelete}
-          className="opacity-0 group-hover/ev:opacity-100 transition-opacity text-white/20 hover:text-red-400/60"
-        >
+        <button onClick={onDelete} className="opacity-0 group-hover/ev:opacity-100 transition-opacity text-white/20 hover:text-red-400/60">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <input
-          value={event.date ?? ''}
-          onChange={(e) => onUpdate({ ...event, date: e.target.value })}
-          placeholder="Date (e.g. Mar 25)"
-          className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
-        />
-        <input
-          value={event.location ?? ''}
-          onChange={(e) => onUpdate({ ...event, location: e.target.value })}
-          placeholder="Location / Venue"
-          className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
-        />
+        <input value={event.date ?? ''} onChange={(e) => onUpdate({ ...event, date: e.target.value })} placeholder="Date" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
+        <input value={event.location ?? ''} onChange={(e) => onUpdate({ ...event, location: e.target.value })} placeholder="Location / Venue" className="bg-transparent text-white/40 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
       </div>
-      <input
-        value={event.link ?? ''}
-        onChange={(e) => onUpdate({ ...event, link: e.target.value })}
-        placeholder="Luma / event link"
-        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5"
-      />
-      <input
-        value={event.sponsorSlot ?? ''}
-        onChange={(e) => onUpdate({ ...event, sponsorSlot: e.target.value })}
-        placeholder="Sponsor slot (e.g. Lead sponsor open)"
-        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
-      />
-      <input
-        value={event.notes ?? ''}
-        onChange={(e) => onUpdate({ ...event, notes: e.target.value })}
-        placeholder="Notes"
-        className="w-full bg-transparent text-white/30 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic py-0.5"
-      />
+      <input value={event.link ?? ''} onChange={(e) => onUpdate({ ...event, link: e.target.value })} placeholder="Luma / event link" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono py-0.5" />
+      <input value={event.sponsorSlot ?? ''} onChange={(e) => onUpdate({ ...event, sponsorSlot: e.target.value })} placeholder="Sponsor slot" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5" />
+      <input value={event.notes ?? ''} onChange={(e) => onUpdate({ ...event, notes: e.target.value })} placeholder="Notes" className="w-full bg-transparent text-white/30 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic py-0.5" />
     </div>
   )
 }
 
 // ─── Contact Card ─────────────────────────────────────────────────────────────
 
-function ContactCard({
-  contact,
-  onUpdate,
-  onDelete,
-}: {
-  contact: TripContact
-  onUpdate: (c: TripContact) => void
-  onDelete: () => void
-}) {
+function ContactCard({ contact, onUpdate, onDelete }: { contact: TripContact; onUpdate: (c: TripContact) => void; onDelete: () => void }) {
   return (
     <div className="group/cx rounded-lg border border-surface-border bg-white/[0.03] p-3 space-y-2">
       <div className="flex items-center gap-2">
@@ -403,43 +664,25 @@ function ContactCard({
           placeholder="Full name"
           className="flex-1 bg-transparent text-white/80 text-sm font-medium outline-none placeholder-white/20 border-b border-transparent focus:border-white/10 transition-colors"
         />
-        <button
-          onClick={onDelete}
-          className="opacity-0 group-hover/cx:opacity-100 transition-opacity text-white/20 hover:text-red-400/60"
-        >
+        <button onClick={onDelete} className="opacity-0 group-hover/cx:opacity-100 transition-opacity text-white/20 hover:text-red-400/60">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {[
-          { key: 'role', placeholder: 'Role' },
-          { key: 'company', placeholder: 'Company' },
-          { key: 'email', placeholder: 'Email' },
-          { key: 'phone', placeholder: 'Phone' },
-        ].map(({ key, placeholder }) => (
+        {(['role', 'company', 'email', 'phone'] as const).map((key) => (
           <input
             key={key}
             value={(contact as unknown as Record<string, string>)[key] ?? ''}
             onChange={(e) => onUpdate({ ...contact, [key]: e.target.value })}
-            placeholder={placeholder}
+            placeholder={key.charAt(0).toUpperCase() + key.slice(1)}
             className="bg-transparent text-white/45 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors py-0.5"
           />
         ))}
       </div>
-      <input
-        value={contact.linkedin ?? ''}
-        onChange={(e) => onUpdate({ ...contact, linkedin: e.target.value })}
-        placeholder="LinkedIn URL"
-        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono"
-      />
-      <input
-        value={contact.notes ?? ''}
-        onChange={(e) => onUpdate({ ...contact, notes: e.target.value })}
-        placeholder="Notes"
-        className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic"
-      />
+      <input value={contact.linkedin ?? ''} onChange={(e) => onUpdate({ ...contact, linkedin: e.target.value })} placeholder="LinkedIn URL" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors font-mono" />
+      <input value={contact.notes ?? ''} onChange={(e) => onUpdate({ ...contact, notes: e.target.value })} placeholder="Notes" className="w-full bg-transparent text-white/35 text-xs outline-none placeholder-white/15 border-b border-transparent focus:border-white/10 transition-colors italic" />
     </div>
   )
 }
