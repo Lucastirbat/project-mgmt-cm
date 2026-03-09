@@ -825,15 +825,14 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
       </div>
 
       {/* Needs / help requests */}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <h4 className="text-white/40 text-[10px] font-semibold uppercase tracking-wider">Help needed (friends view)</h4>
-        <div className="flex flex-wrap gap-2">
-          {(['accommodation', 'travel', 'venue'] as TripNeed[]).map((need) => {
-            const active = stop.needs?.includes(need) ?? false
-            const labels: Record<TripNeed, string> = { accommodation: '🛏 Accommodation', travel: '✈️ Travel', venue: '📍 Venue / partners' }
-            return (
+        {(['accommodation', 'travel', 'venue'] as TripNeed[]).map((need) => {
+          const active = stop.needs?.includes(need) ?? false
+          const labels: Record<TripNeed, string> = { accommodation: '🛏 Accommodation', travel: '✈️ Travel', venue: '📍 Venue / partners' }
+          return (
+            <div key={need} className="space-y-1">
               <button
-                key={need}
                 onClick={() => {
                   const cur = stop.needs ?? []
                   onUpdate({ ...stop, needs: active ? cur.filter((n) => n !== need) : [...cur, need] })
@@ -847,9 +846,17 @@ function StopDetail({ stop, onUpdate, onDelete, onClose }: { stop: TripStop; onU
               >
                 {labels[need]}
               </button>
-            )
-          })}
-        </div>
+              {active && (
+                <input
+                  value={stop.needsNotes?.[need] ?? ''}
+                  onChange={(e) => onUpdate({ ...stop, needsNotes: { ...stop.needsNotes, [need]: e.target.value } })}
+                  placeholder="Add context for friends (dates, specs…)"
+                  className="w-full bg-transparent text-white/40 text-xs outline-none border-b border-white/10 focus:border-white/20 transition-colors placeholder-white/15 pb-0.5"
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="space-y-4">

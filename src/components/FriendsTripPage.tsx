@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, Marker, useMap, ZoomControl } from 'react-leaflet'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,12 +24,19 @@ interface TripEvent {
 
 type TripNeed = 'accommodation' | 'travel' | 'venue'
 
+const NEED_CFG: Record<TripNeed, { icon: string; label: string; mapEmoji: string }> = {
+  accommodation: { icon: '🛏', label: 'Looking for accommodation',    mapEmoji: '🛏' },
+  travel:        { icon: '✈️', label: 'Looking for travel / transport', mapEmoji: '✈️' },
+  venue:         { icon: '📍', label: 'Looking for venue or partners', mapEmoji: '📍' },
+}
+
 interface TripStop {
   id: string; country: string; capital: string; flag: string
   lat: number; lng: number; arrivalDate: string; departureDate: string
   arrivalTime?: string; departureTime?: string
   transport?: 'plane' | 'bus' | 'car'
   needs?: TripNeed[]
+  needsNotes?: { accommodation?: string; travel?: string; venue?: string }
   events: TripEvent[]; contacts: TripContact[]
 }
 
@@ -307,6 +315,8 @@ export default function FriendsTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
+  // draft offer text keyed by `${stopId}-${need}`
+  const [offers, setOffers] = useState<Record<string, string>>({})
 
   const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
   const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
@@ -404,6 +414,21 @@ export default function FriendsTripPage() {
                 </Tooltip>
               </CircleMarker>
             ) : null)}
+
+            {/* Need markers — emoji badges above stops that have active needs */}
+            {stops.filter(s => s.needs?.length).map(stop => (
+              <Marker
+                key={`needs-${stop.id}`}
+                position={[stop.lat, stop.lng]}
+                interactive={false}
+                icon={L.divIcon({
+                  html: `<div style="display:flex;gap:2px;font-size:13px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.8));">${stop.needs!.map(n => NEED_CFG[n].mapEmoji).join('')}</div>`,
+                  className: '',
+                  iconSize: [0, 0],
+                  iconAnchor: [-6, 20],
+                })}
+              />
+            ))}
           </MapContainer>
         )}
 
@@ -436,18 +461,42 @@ export default function FriendsTripPage() {
 
               {/* Needs / help requests */}
               {panelStop.needs && panelStop.needs.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                   {panelStop.needs.map((need) => {
-                    const cfg: Record<TripNeed, { icon: string; label: string }> = {
-                      accommodation: { icon: '🛏', label: 'Looking for accommodation' },
-                      travel:        { icon: '✈️', label: 'Looking for travel / transport' },
-                      venue:         { icon: '📍', label: 'Looking for venue or partners' },
-                    }
-                    const { icon, label } = cfg[need]
+                    const { icon, label } = NEED_CFG[need]
+                    const note = panelStop.needsNotes?.[need]
+                    const offerKey = `${panelStop.id}-${need}`
+                    const draft = offers[offerKey] ?? ''
+                    const copied = draft === '__copied__'
                     return (
-                      <div key={need} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '7px 10px' }}>
-                        <span style={{ fontSize: 14 }}>{icon}</span>
-                        <span style={{ color: '#fca5a5', fontSize: 11, fontWeight: 500 }}>{label}</span>
+                      <div key={need} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 10, padding: '9px 11px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: note ? 4 : 6 }}>
+                          <span style={{ fontSize: 14 }}>{icon}</span>
+                          <span style={{ color: '#fca5a5', fontSize: 11, fontWeight: 600, flex: 1 }}>{label}</span>
+                        </div>
+                        {note && (
+                          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginBottom: 7, fontStyle: 'italic' }}>{note}</div>
+                        )}
+                        <textarea
+                          value={copied ? '' : draft}
+                          onChange={(e) => setOffers(o => ({ ...o, [offerKey]: e.target.value }))}
+                          placeholder="Write your offer or recommendation…"
+                          rows={2}
+                          style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.7)', fontSize: 11, padding: '5px 7px', resize: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
+                        />
+                        <button
+                          disabled={!draft || copied}
+                          onClick={() => {
+                            const msg = `Hi! Re: ${panelStop.capital} – ${label.toLowerCase()}\n\n${draft}`
+                            navigator.clipboard.writeText(msg).then(() => {
+                              setOffers(o => ({ ...o, [offerKey]: '__copied__' }))
+                              setTimeout(() => setOffers(o => ({ ...o, [offerKey]: draft })), 2000)
+                            })
+                          }}
+                          style={{ marginTop: 5, fontSize: 10, padding: '3px 9px', borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.15)', color: copied ? '#86efac' : '#fca5a5', cursor: draft ? 'pointer' : 'default', opacity: draft ? 1 : 0.4, transition: 'color 0.2s' }}
+                        >
+                          {copied ? '✓ Copied!' : 'Copy message'}
+                        </button>
                       </div>
                     )
                   })}

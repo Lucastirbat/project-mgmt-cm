@@ -71,6 +71,7 @@ export interface TripStop {
   departureTime?: string  // 'HH:MM' — local time of departure
   transport?: 'plane' | 'bus' | 'car'  // how you travel TO this stop
   needs?: TripNeed[]      // help requests shown on friends view
+  needsNotes?: { accommodation?: string; travel?: string; venue?: string }
   events: TripEvent[]
   contacts: TripContact[]
 }
