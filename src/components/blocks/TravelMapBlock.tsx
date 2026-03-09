@@ -26,9 +26,51 @@ function uid() {
   return Math.random().toString(36).slice(2, 9)
 }
 
-// Treat dates as local noon to sidestep timezone edge cases
-function dateToMs(dateStr: string): number {
-  return new Date(dateStr + 'T12:00:00').getTime()
+function legMs(date: string, time?: string): number {
+  if (time) return new Date(`${date}T${time}:00`).getTime()
+  return new Date(date + 'T12:00:00').getTime()
+}
+
+function arcPoints(from: [number, number], to: [number, number], n = 40): [number, number][] {
+  const midLat = (from[0] + to[0]) / 2
+  const midLng = (from[1] + to[1]) / 2
+  const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const ctrlLat = midLat + dist * 0.35
+  const pts: [number, number][] = []
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    pts.push([
+      (1 - t) * (1 - t) * from[0] + 2 * (1 - t) * t * ctrlLat + t * t * to[0],
+      (1 - t) * (1 - t) * from[1] + 2 * (1 - t) * t * midLng + t * t * to[1],
+    ])
+  }
+  return pts
+}
+
+function getTravelerPos(stops: TripStop[], playheadMs: number): [number, number] | null {
+  for (let i = 0; i < stops.length - 1; i++) {
+    const curr = stops[i]
+    const next = stops[i + 1]
+    if (!curr.departureTime && !next.arrivalTime) continue
+    const depMs = legMs(curr.departureDate, curr.departureTime)
+    const arrMs = legMs(next.arrivalDate, next.arrivalTime)
+    if (playheadMs < depMs || playheadMs > arrMs || arrMs <= depMs) continue
+    const t = (playheadMs - depMs) / (arrMs - depMs)
+    const from: [number, number] = [curr.lat, curr.lng]
+    const to: [number, number] = [next.lat, next.lng]
+    if (next.transport === 'plane') {
+      const pts = arcPoints(from, to)
+      const rawIdx = t * (pts.length - 1)
+      const idx = Math.floor(rawIdx)
+      const frac = rawIdx - idx
+      const a = pts[Math.min(idx, pts.length - 1)]
+      const b = pts[Math.min(idx + 1, pts.length - 1)]
+      return [a[0] + frac * (b[0] - a[0]), a[1] + frac * (b[1] - a[1])]
+    } else {
+      return [curr.lat + t * (next.lat - curr.lat), curr.lng + t * (next.lng - curr.lng)]
+    }
+  }
+  return null
 }
 
 // ─── Timeline constants ───────────────────────────────────────────────────────
@@ -263,9 +305,9 @@ function TripTimeline({
 
       {/* Stop arrival markers */}
       {stops.map((stop) => {
-        const x = msToX(dateToMs(stop.arrivalDate))
+        const x = msToX(legMs(stop.arrivalDate, stop.arrivalTime))
         if (x < -20 || x > containerWidth + 20) return null
-        const reached = dateToMs(stop.arrivalDate) <= playheadMs
+        const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
         return (
           <div key={stop.id} className="absolute inset-y-0 pointer-events-none" style={{ left: x }}>
             <div
@@ -379,12 +421,13 @@ export default function TravelMapBlock({ block, onChange }: Props) {
   const [isClient, setIsClient] = useState(false)
 
   // Timeline state
-  const tripStartMs = stops.length ? dateToMs(stops[0].arrivalDate) : Date.now() - DAY
-  const tripEndMs = stops.length ? dateToMs(stops[stops.length - 1].departureDate) : Date.now() + DAY
+  const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
+  const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
 
   const [playheadMs, setPlayheadMs] = useState<number>(() =>
     Math.max(tripStartMs, Math.min(tripEndMs, Date.now())),
   )
+  const travelerPos = getTravelerPos(stops, playheadMs)
   const [viewStartMs, setViewStartMs] = useState(tripStartMs)
   const [viewEndMs, setViewEndMs] = useState(tripEndMs)
 
@@ -449,26 +492,39 @@ export default function TravelMapBlock({ block, onChange }: Props) {
             {/* Route segments: highlight those reached by the playhead */}
             {stops.slice(1).map((stop, i) => {
               const prev = stops[i]
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
+              const isPlane = stop.transport === 'plane'
+              const positions = isPlane
+                ? arcPoints([prev.lat, prev.lng], [stop.lat, stop.lng])
+                : [[prev.lat, prev.lng], [stop.lat, stop.lng]] as [number, number][]
               return (
                 <Polyline
                   key={`seg-${i}`}
-                  positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]}
+                  positions={positions}
                   pathOptions={{
                     color: reached ? '#6366f1' : '#ffffff',
                     weight: reached ? 2.5 : 1.5,
                     opacity: reached ? 0.75 : 0.18,
-                    dashArray: reached ? undefined : '4 6',
+                    dashArray: reached ? undefined : isPlane ? '3 5' : '4 6',
                   }}
                 />
               )
             })}
 
+            {/* Animated traveler marker */}
+            {travelerPos && (
+              <CircleMarker center={travelerPos} radius={8} pathOptions={{ fillColor: '#6366f1', fillOpacity: 1, color: '#fff', weight: 2.5 }}>
+                <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>✈️ In transit</span>
+                </Tooltip>
+              </CircleMarker>
+            )}
+
             {/* City markers */}
             {stops.map((stop) => {
               const status = stopStatus(stop)
               const isSelected = stop.id === selectedId
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
               const color =
                 status === 'current' ? '#6366f1' : reached ? '#a78bfa' : '#4b5563'
               const radius = status === 'current' ? 10 : isSelected ? 9 : 7

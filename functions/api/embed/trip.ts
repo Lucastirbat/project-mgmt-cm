@@ -37,6 +37,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             tripStops?: Array<{
               id: string; country: string; capital: string; flag: string
               lat: number; lng: number; arrivalDate: string; departureDate: string
+              arrivalTime?: string; departureTime?: string; transport?: string
               events?: Array<{ id: string; title: string; date?: string; location?: string; link?: string; sponsorSlot?: string; notes?: string }>
               contacts?: unknown[]
             }>

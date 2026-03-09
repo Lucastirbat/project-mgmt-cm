@@ -62,6 +62,9 @@ export interface TripStop {
   lng: number
   arrivalDate: string
   departureDate: string
+  arrivalTime?: string    // 'HH:MM' — local time of arrival
+  departureTime?: string  // 'HH:MM' — local time of departure
+  transport?: 'plane' | 'bus' | 'car'  // how you travel TO this stop
   events: TripEvent[]
   contacts: TripContact[]
 }

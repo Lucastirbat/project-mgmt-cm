@@ -26,6 +26,9 @@ interface TripStop {
   lng: number
   arrivalDate: string
   departureDate: string
+  arrivalTime?: string
+  departureTime?: string
+  transport?: 'plane' | 'bus' | 'car'
   events: TripEvent[]
 }
 
@@ -35,7 +38,10 @@ const MIN = 60_000
 const HOUR = 3_600_000
 const DAY = 86_400_000
 
-function dateToMs(d: string) { return new Date(d + 'T12:00:00').getTime() }
+function legMs(date: string, time?: string): number {
+  if (time) return new Date(`${date}T${time}:00`).getTime()
+  return new Date(date + 'T12:00:00').getTime()
+}
 
 function getTickConfig(visibleMs: number) {
   if (visibleMs > 30 * DAY) return { major: 7 * DAY, minor: DAY, fmt: (d: Date) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) }
@@ -57,6 +63,51 @@ function fmtPlayhead(ms: number, visibleMs: number) {
   if (visibleMs > 3 * DAY) return d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
   if (visibleMs > HOUR) return d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
   return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+// ─── Transport helpers ────────────────────────────────────────────────────────
+
+function arcPoints(from: [number, number], to: [number, number], n = 40): [number, number][] {
+  const midLat = (from[0] + to[0]) / 2
+  const midLng = (from[1] + to[1]) / 2
+  const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const ctrlLat = midLat + dist * 0.35
+  const ctrlLng = midLng
+  const pts: [number, number][] = []
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    pts.push([
+      (1 - t) * (1 - t) * from[0] + 2 * (1 - t) * t * ctrlLat + t * t * to[0],
+      (1 - t) * (1 - t) * from[1] + 2 * (1 - t) * t * ctrlLng + t * t * to[1],
+    ])
+  }
+  return pts
+}
+
+function getTravelerPos(stops: TripStop[], playheadMs: number): [number, number] | null {
+  for (let i = 0; i < stops.length - 1; i++) {
+    const curr = stops[i]
+    const next = stops[i + 1]
+    if (!curr.departureTime && !next.arrivalTime) continue
+    const depMs = legMs(curr.departureDate, curr.departureTime)
+    const arrMs = legMs(next.arrivalDate, next.arrivalTime)
+    if (playheadMs < depMs || playheadMs > arrMs || arrMs <= depMs) continue
+    const t = (playheadMs - depMs) / (arrMs - depMs)
+    const from: [number, number] = [curr.lat, curr.lng]
+    const to: [number, number] = [next.lat, next.lng]
+    if (next.transport === 'plane') {
+      const pts = arcPoints(from, to)
+      const rawIdx = t * (pts.length - 1)
+      const idx = Math.floor(rawIdx)
+      const frac = rawIdx - idx
+      const a = pts[Math.min(idx, pts.length - 1)]
+      const b = pts[Math.min(idx + 1, pts.length - 1)]
+      return [a[0] + frac * (b[0] - a[0]), a[1] + frac * (b[1] - a[1])]
+    } else {
+      return [curr.lat + t * (next.lat - curr.lat), curr.lng + t * (next.lng - curr.lng)]
+    }
+  }
+  return null
 }
 
 // ─── Timeline component ───────────────────────────────────────────────────────
@@ -171,7 +222,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
       {todayX >= 0 && todayX <= containerWidth && <div style={{ position: 'absolute', top: 0, bottom: 0, left: todayX, borderLeft: '1px dashed rgba(255,255,255,0.22)', pointerEvents: 'none' }} />}
 
       {/* Stop flags */}
-      {stops.map((stop) => { const x = msToX(dateToMs(stop.arrivalDate)); if (x < -20 || x > containerWidth + 20) return null; const reached = dateToMs(stop.arrivalDate) <= playheadMs; return (
+      {stops.map((stop) => { const x = msToX(legMs(stop.arrivalDate, stop.arrivalTime)); if (x < -20 || x > containerWidth + 20) return null; const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs; return (
         <div key={stop.id} style={{ position: 'absolute', top: 0, bottom: 0, left: x, pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', top: 0, bottom: 0, borderLeft: `1px solid ${reached ? `${accent}80` : 'rgba(255,255,255,0.18)'}` }} />
           <span style={{ position: 'absolute', bottom: 7, left: 4, fontSize: 12, lineHeight: 1, opacity: reached ? 1 : 0.3 }}>{stop.flag}</span>
@@ -244,8 +295,8 @@ export default function PublicTripPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
 
-  const tripStartMs = stops.length ? dateToMs(stops[0].arrivalDate) : Date.now() - DAY
-  const tripEndMs = stops.length ? dateToMs(stops[stops.length - 1].departureDate) : Date.now() + DAY
+  const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
+  const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
 
   const [playheadMs, setPlayheadMs] = useState<number>(() => Date.now())
   const [viewStartMs, setViewStartMs] = useState(tripStartMs)
@@ -253,8 +304,8 @@ export default function PublicTripPage() {
 
   useEffect(() => {
     if (stops.length) {
-      const s = dateToMs(stops[0].arrivalDate)
-      const e = dateToMs(stops[stops.length - 1].departureDate)
+      const s = legMs(stops[0].arrivalDate, stops[0].arrivalTime)
+      const e = legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime)
       setPlayheadMs(Math.max(s, Math.min(e, Date.now())))
       setViewStartMs(s)
       setViewEndMs(e)
@@ -278,6 +329,7 @@ export default function PublicTripPage() {
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
   const selectedStop = stops.find((s) => s.id === selectedId) ?? null
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
+  const travelerPos = getTravelerPos(stops, playheadMs)
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
@@ -306,14 +358,24 @@ export default function PublicTripPage() {
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap &copy; CARTO' />
             <MapEffects />
 
+            {/* Route segments */}
             {stops.slice(1).map((stop, i) => {
               const prev = stops[i]
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
-              return <Polyline key={`seg-${i}`} positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]} pathOptions={{ color: reached ? ACCENT : '#ffffff', weight: reached ? 2.5 : 1.5, opacity: reached ? 0.7 : 0.15, dashArray: reached ? undefined : '4 6' }} />
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
+              const isPlane = stop.transport === 'plane'
+              const positions = isPlane
+                ? arcPoints([prev.lat, prev.lng], [stop.lat, stop.lng])
+                : [[prev.lat, prev.lng], [stop.lat, stop.lng]] as [number, number][]
+              return <Polyline
+                key={`seg-${i}`}
+                positions={positions}
+                pathOptions={{ color: reached ? ACCENT : '#ffffff', weight: reached ? 2.5 : 1.5, opacity: reached ? 0.7 : 0.15, dashArray: reached ? undefined : isPlane ? '3 5' : '4 6' }}
+              />
             })}
 
+            {/* City markers */}
             {stops.map((stop) => {
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
               const isSelected = stop.id === selectedId
               const isCurrent = stopStatus(stop) === 'current'
               const color = isCurrent ? ACCENT : reached ? '#a78bfa' : '#4b5563'
@@ -323,6 +385,15 @@ export default function PublicTripPage() {
                 </CircleMarker>
               )
             })}
+
+            {/* Animated traveler marker */}
+            {travelerPos && (
+              <CircleMarker center={travelerPos} radius={8} pathOptions={{ fillColor: ACCENT, fillOpacity: 1, color: '#fff', weight: 2.5 }}>
+                <Tooltip direction="top" offset={[0, -10]} opacity={0.95} permanent={false}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>✈️ In transit</span>
+                </Tooltip>
+              </CircleMarker>
+            )}
           </MapContainer>
         )}
 
@@ -338,6 +409,11 @@ export default function PublicTripPage() {
                     {stopStatus(selectedStop) === 'current' && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 400, background: 'rgba(99,102,241,0.2)', color: '#818cf8', borderRadius: 20, padding: '2px 7px' }}>Here now</span>}
                   </div>
                   <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{selectedStop.country} · {fmt(selectedStop.arrivalDate)} – {fmt(selectedStop.departureDate)}</div>
+                  {selectedStop.transport && (
+                    <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 1 }}>
+                      {{ plane: '✈️', bus: '🚌', car: '🚗' }[selectedStop.transport]} via {selectedStop.transport}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 2, fontSize: 16, lineHeight: 1 }}>×</button>
               </div>

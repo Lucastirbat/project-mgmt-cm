@@ -1,6 +1,6 @@
 /**
  * /trip/friends — Private friends-facing trip map.
- * Requires TRIP_FRIENDS_PASSWORD. Shows contacts + full event details.
+ * Auth temporarily disabled. Shows contacts + full event details.
  * Amber accent (#f59e0b) distinguishes it from the public fan page.
  */
 
@@ -23,6 +23,8 @@ interface TripEvent {
 interface TripStop {
   id: string; country: string; capital: string; flag: string
   lat: number; lng: number; arrivalDate: string; departureDate: string
+  arrivalTime?: string; departureTime?: string
+  transport?: 'plane' | 'bus' | 'car'
   events: TripEvent[]; contacts: TripContact[]
 }
 
@@ -35,7 +37,10 @@ const TODAY = new Date().toISOString().slice(0, 10)
 
 const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000
 
-function dateToMs(d: string) { return new Date(d + 'T12:00:00').getTime() }
+function legMs(date: string, time?: string): number {
+  if (time) return new Date(`${date}T${time}:00`).getTime()
+  return new Date(date + 'T12:00:00').getTime()
+}
 
 function stopStatus(stop: TripStop): 'past' | 'current' | 'upcoming' {
   if (TODAY >= stop.departureDate) return 'past'
@@ -45,6 +50,59 @@ function stopStatus(stop: TripStop): 'past' | 'current' | 'upcoming' {
 
 function fmt(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })
+}
+
+function fmtTime(t?: string) {
+  if (!t) return ''
+  const [h, m] = t.split(':')
+  return `${h}:${m}`
+}
+
+// ─── Transport helpers ────────────────────────────────────────────────────────
+
+const TRANSPORT_ICON: Record<string, string> = { plane: '✈️', bus: '🚌', car: '🚗' }
+
+function arcPoints(from: [number, number], to: [number, number], n = 40): [number, number][] {
+  const midLat = (from[0] + to[0]) / 2
+  const midLng = (from[1] + to[1]) / 2
+  const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const ctrlLat = midLat + dist * 0.35
+  const ctrlLng = midLng
+  const pts: [number, number][] = []
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    pts.push([
+      (1 - t) * (1 - t) * from[0] + 2 * (1 - t) * t * ctrlLat + t * t * to[0],
+      (1 - t) * (1 - t) * from[1] + 2 * (1 - t) * t * ctrlLng + t * t * to[1],
+    ])
+  }
+  return pts
+}
+
+function getTravelerPos(stops: TripStop[], playheadMs: number): [number, number] | null {
+  for (let i = 0; i < stops.length - 1; i++) {
+    const curr = stops[i]
+    const next = stops[i + 1]
+    if (!curr.departureTime && !next.arrivalTime) continue
+    const depMs = legMs(curr.departureDate, curr.departureTime)
+    const arrMs = legMs(next.arrivalDate, next.arrivalTime)
+    if (playheadMs < depMs || playheadMs > arrMs || arrMs <= depMs) continue
+    const t = (playheadMs - depMs) / (arrMs - depMs)
+    const from: [number, number] = [curr.lat, curr.lng]
+    const to: [number, number] = [next.lat, next.lng]
+    if (next.transport === 'plane') {
+      const pts = arcPoints(from, to)
+      const rawIdx = t * (pts.length - 1)
+      const idx = Math.floor(rawIdx)
+      const frac = rawIdx - idx
+      const a = pts[Math.min(idx, pts.length - 1)]
+      const b = pts[Math.min(idx + 1, pts.length - 1)]
+      return [a[0] + frac * (b[0] - a[0]), a[1] + frac * (b[1] - a[1])]
+    } else {
+      return [curr.lat + t * (next.lat - curr.lat), curr.lng + t * (next.lng - curr.lng)]
+    }
+  }
+  return null
 }
 
 // ─── Timeline helpers ─────────────────────────────────────────────────────────
@@ -176,7 +234,7 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
 
       {todayX >= 0 && todayX <= containerWidth && <div style={{ position: 'absolute', top: 0, bottom: 0, left: todayX, borderLeft: '1px dashed rgba(255,255,255,0.22)', pointerEvents: 'none' }} />}
 
-      {stops.map((stop) => { const x = msToX(dateToMs(stop.arrivalDate)); if (x < -20 || x > containerWidth + 20) return null; const reached = dateToMs(stop.arrivalDate) <= playheadMs; return (
+      {stops.map((stop) => { const x = msToX(legMs(stop.arrivalDate, stop.arrivalTime)); if (x < -20 || x > containerWidth + 20) return null; const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs; return (
         <div key={stop.id} style={{ position: 'absolute', top: 0, bottom: 0, left: x, pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', top: 0, bottom: 0, borderLeft: `1px solid ${reached ? `${accent}80` : 'rgba(255,255,255,0.18)'}` }} />
           <span style={{ position: 'absolute', bottom: 7, left: 4, fontSize: 12, lineHeight: 1, opacity: reached ? 1 : 0.3 }}>{stop.flag}</span>
@@ -221,89 +279,47 @@ function MapEffects() {
   return null
 }
 
-// ─── Password gate ────────────────────────────────────────────────────────────
-
-function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [value, setValue] = useState('')
-  const [error, setError] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { inputRef.current?.focus() }, [])
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true); setError(false)
-    try {
-      const r = await fetch('/api/trip/friends-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: value }) })
-      if (r.ok) { onAuth() } else { setError(true); setValue(''); inputRef.current?.focus() }
-    } catch { setError(true) } finally { setLoading(false) }
-  }
-
-  return (
-    <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', fontFamily: 'Inter, sans-serif' }}>
-      <div style={{ width: 320, padding: 32, borderRadius: 18, background: '#111', border: '1px solid #1f1f1f' }}>
-        <div style={{ fontSize: 28, marginBottom: 12, textAlign: 'center' }}>🔒</div>
-        <div style={{ color: '#fff', fontSize: 16, fontWeight: 600, textAlign: 'center', marginBottom: 4 }}>Friends access</div>
-        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, textAlign: 'center', marginBottom: 24 }}>Enter the password to see the full trip details</div>
-        <form onSubmit={submit}>
-          <input ref={inputRef} type="password" value={value} onChange={(e) => { setValue(e.target.value); setError(false) }} placeholder="Password"
-            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 10, background: '#1a1a1a', border: `1px solid ${error ? '#ef4444' : '#2a2a2a'}`, color: '#fff', fontSize: 14, outline: 'none', marginBottom: 8, fontFamily: 'Inter, sans-serif' }} />
-          {error && <div style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>Wrong password, try again.</div>}
-          <button type="submit" disabled={loading || !value}
-            style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: ACCENT, color: '#000', fontSize: 14, fontWeight: 600, cursor: loading || !value ? 'not-allowed' : 'pointer', opacity: loading || !value ? 0.5 : 1, fontFamily: 'Inter, sans-serif' }}>
-            {loading ? 'Checking…' : 'Enter'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function FriendsTripPage() {
-  const [authed, setAuthed] = useState<'checking' | 'no' | 'yes'>('checking')
   const [stops, setStops] = useState<TripStop[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
 
-  const tripStartMs = stops.length ? dateToMs(stops[0].arrivalDate) : Date.now() - DAY
-  const tripEndMs = stops.length ? dateToMs(stops[stops.length - 1].departureDate) : Date.now() + DAY
+  const tripStartMs = stops.length ? legMs(stops[0].arrivalDate, stops[0].arrivalTime) : Date.now() - DAY
+  const tripEndMs = stops.length ? legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime) : Date.now() + DAY
   const [playheadMs, setPlayheadMs] = useState<number>(() => Date.now())
   const [viewStartMs, setViewStartMs] = useState(tripStartMs)
   const [viewEndMs, setViewEndMs] = useState(tripEndMs)
 
   useEffect(() => {
     if (stops.length) {
-      const s = dateToMs(stops[0].arrivalDate)
-      const e = dateToMs(stops[stops.length - 1].departureDate)
+      const s = legMs(stops[0].arrivalDate, stops[0].arrivalTime)
+      const e = legMs(stops[stops.length - 1].departureDate, stops[stops.length - 1].departureTime)
       setPlayheadMs(Math.max(s, Math.min(e, Date.now())))
       setViewStartMs(s); setViewEndMs(e)
     }
   }, [stops.length])
 
-  async function loadData() {
-    setLoading(true)
-    try {
-      const r = await fetch('/api/trip/friends-data')
-      if (r.status === 401) { setAuthed('no'); return }
-      const d = await r.json() as { stops: TripStop[] }
-      const loaded = d.stops ?? []
-      setStops(loaded)
-      const cur = loaded.find((s) => stopStatus(s) === 'current')
-      setSelectedId(cur?.id ?? loaded[0]?.id ?? null)
-      setAuthed('yes')
-    } catch { setAuthed('no') } finally { setLoading(false) }
-  }
-
-  useEffect(() => { setIsClient(true); loadData() }, [])
-
-  if (authed === 'checking') return <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', color: 'rgba(255,255,255,0.25)', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>Loading…</div>
-  if (authed === 'no') return <PasswordGate onAuth={() => loadData()} />
+  useEffect(() => {
+    setIsClient(true)
+    fetch('/api/trip/friends-data')
+      .then((r) => r.json())
+      .then((d: { stops: TripStop[] }) => {
+        const loaded = d.stops ?? []
+        setStops(loaded)
+        const cur = loaded.find((s) => stopStatus(s) === 'current')
+        setSelectedId(cur?.id ?? loaded[0]?.id ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
   const selectedStop = stops.find((s) => s.id === selectedId) ?? null
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
+  const travelerPos = getTravelerPos(stops, playheadMs)
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
@@ -335,14 +351,24 @@ export default function FriendsTripPage() {
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap &copy; CARTO' />
             <MapEffects />
 
+            {/* Route segments */}
             {stops.slice(1).map((stop, i) => {
               const prev = stops[i]
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
-              return <Polyline key={`seg-${i}`} positions={[[prev.lat, prev.lng], [stop.lat, stop.lng]]} pathOptions={{ color: reached ? ACCENT : '#ffffff', weight: reached ? 2.5 : 1.5, opacity: reached ? 0.7 : 0.15, dashArray: reached ? undefined : '4 6' }} />
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
+              const isPlane = stop.transport === 'plane'
+              const positions = isPlane
+                ? arcPoints([prev.lat, prev.lng], [stop.lat, stop.lng])
+                : [[prev.lat, prev.lng], [stop.lat, stop.lng]] as [number, number][]
+              return <Polyline
+                key={`seg-${i}`}
+                positions={positions}
+                pathOptions={{ color: reached ? ACCENT : '#ffffff', weight: reached ? 2.5 : 1.5, opacity: reached ? 0.7 : 0.15, dashArray: reached ? undefined : isPlane ? '3 5' : '4 6' }}
+              />
             })}
 
+            {/* City markers */}
             {stops.map((stop) => {
-              const reached = dateToMs(stop.arrivalDate) <= playheadMs
+              const reached = legMs(stop.arrivalDate, stop.arrivalTime) <= playheadMs
               const isSelected = stop.id === selectedId
               const isCurrent = stopStatus(stop) === 'current'
               const color = isCurrent ? ACCENT : reached ? '#d97706' : '#4b5563'
@@ -352,6 +378,15 @@ export default function FriendsTripPage() {
                 </CircleMarker>
               )
             })}
+
+            {/* Animated traveler marker */}
+            {travelerPos && (
+              <CircleMarker center={travelerPos} radius={8} pathOptions={{ fillColor: ACCENT, fillOpacity: 1, color: '#fff', weight: 2.5 }}>
+                <Tooltip direction="top" offset={[0, -10]} opacity={0.95} permanent={false}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>✈️ In transit</span>
+                </Tooltip>
+              </CircleMarker>
+            )}
           </MapContainer>
         )}
 
@@ -367,6 +402,18 @@ export default function FriendsTripPage() {
                     {stopStatus(selectedStop) === 'current' && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 400, background: ACCENT_DIM, color: ACCENT, borderRadius: 20, padding: '2px 7px', border: `1px solid ${ACCENT_BORDER}` }}>Here now</span>}
                   </div>
                   <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{selectedStop.country} · {fmt(selectedStop.arrivalDate)} – {fmt(selectedStop.departureDate)}</div>
+                  {(selectedStop.arrivalTime || selectedStop.departureTime) && (
+                    <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 2 }}>
+                      {selectedStop.arrivalTime && `Arrives ${fmtTime(selectedStop.arrivalTime)}`}
+                      {selectedStop.arrivalTime && selectedStop.departureTime && ' · '}
+                      {selectedStop.departureTime && `Departs ${fmtTime(selectedStop.departureTime)}`}
+                    </div>
+                  )}
+                  {selectedStop.transport && (
+                    <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, marginTop: 1 }}>
+                      {TRANSPORT_ICON[selectedStop.transport]} via {selectedStop.transport}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', padding: 2, fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
