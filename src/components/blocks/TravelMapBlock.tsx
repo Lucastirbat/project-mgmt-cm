@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Block, TripStop, TripEvent, TripContact } from '../../data/schema'
 
@@ -137,7 +137,17 @@ function TripTimeline({
       }
     }
 
-    function onUp() {
+    function onUp(e: MouseEvent) {
+      if (dragging.current === 'pan' && panAnchor.current && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const dist = Math.abs((e.clientX - rect.left) - panAnchor.current.mouseX)
+        if (dist < 5) {
+          // It was a click — jump playhead to that position
+          const { viewStartMs: vs, viewEndMs: ve, containerWidth: w } = viewRef.current
+          const ms = vs + (panAnchor.current.mouseX / w) * (ve - vs)
+          cbRef.current.onPlayheadChange(Math.max(tripStartMs, Math.min(tripEndMs, ms)))
+        }
+      }
       dragging.current = null
       panAnchor.current = null
     }
@@ -281,7 +291,7 @@ function TripTimeline({
       {/* Playhead line */}
       <div
         className="absolute inset-y-0 pointer-events-none"
-        style={{ left: playheadX, borderLeft: '2px solid rgba(99,102,241,0.9)', zIndex: 5 }}
+        style={{ left: playheadX, borderLeft: '2px solid rgba(99,102,241,0.9)', zIndex: 5, transition: 'left 0.06s linear' }}
       />
 
       {/* Playhead label */}
@@ -320,6 +330,23 @@ function TripTimeline({
       </span>
     </div>
   )
+}
+
+// ─── Map effects: slower scroll zoom + CSS path transitions ──────────────────
+
+function MapEffects() {
+  const map = useMap()
+  useEffect(() => {
+    const handler = (map as unknown as Record<string, { options?: { wheelPxPerZoomLevel?: number } }>)['scrollWheelZoom']
+    if (handler?.options) handler.options.wheelPxPerZoomLevel = 300
+    const style = document.createElement('style')
+    style.id = 'trip-map-transitions'
+    style.textContent =
+      '.leaflet-overlay-pane path { transition: stroke 0.4s ease, stroke-opacity 0.35s ease, stroke-width 0.25s ease, fill 0.4s ease, fill-opacity 0.35s ease; }'
+    document.head.appendChild(style)
+    return () => { document.getElementById('trip-map-transitions')?.remove() }
+  }, [map])
+  return null
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -397,6 +424,7 @@ export default function TravelMapBlock({ block, onChange }: Props) {
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               attribution='&copy; OpenStreetMap &copy; CARTO'
             />
+            <MapEffects />
 
             {/* Route segments: highlight those reached by the playhead */}
             {stops.slice(1).map((stop, i) => {

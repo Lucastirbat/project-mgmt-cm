@@ -7,6 +7,8 @@ import CompanyPage from './components/CompanyPage'
 import ProjectPage from './components/ProjectPage'
 import SocialMediaPage from './components/SocialMediaPage'
 import EmbedTripPage from './components/EmbedTripPage'
+import PublicTripPage from './components/PublicTripPage'
+import FriendsTripPage from './components/FriendsTripPage'
 
 export default function App() {
   return (
@@ -14,6 +16,10 @@ export default function App() {
       <Routes>
         {/* Public embed routes — no auth, no DataProvider */}
         <Route path="/embed/trip" element={<EmbedTripPage />} />
+
+        {/* Public trip pages — no PM auth needed */}
+        <Route path="/trip" element={<PublicTripPage />} />
+        <Route path="/trip/friends" element={<FriendsTripPage />} />
 
         <Route path="/login" element={<LoginPage />} />
         <Route
