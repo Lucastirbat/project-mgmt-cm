@@ -57,6 +57,15 @@ export default function EmbedTripPage() {
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    document.title = 'RX CEE Trip'
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement('link')
+    link.rel = 'icon'
+    link.href = 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png.webp'
+    document.head.appendChild(link)
+    return () => { document.title = 'Creative Motion — Project Management' }
+  }, [])
+
+  useEffect(() => {
     setIsClient(true)
     fetch('/api/embed/trip')
       .then((r) => r.json())
