@@ -19,13 +19,52 @@ const isPublicEmbed = (path: string) =>
 // Static asset extensions that don't need auth checks
 const STATIC_EXT = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|avif)$/i
 
+// Social preview meta tags injected server-side for crawler compatibility
+const SOCIAL_META: Record<string, { title: string; description: string }> = {
+  '/trip': {
+    title: 'RX CEE Trip',
+    description: 'Follow the ReaktorX CEE trip in real time.',
+  },
+  '/trip/friends': {
+    title: 'RX Friends Trip',
+    description: 'The friends view of the ReaktorX CEE trip.',
+  },
+}
+const RX_OG_IMAGE = 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Group-1-5-1.png.webp'
+
+async function injectSocialMeta(response: Response, meta: { title: string; description: string }): Promise<Response> {
+  const html = await response.text()
+  const tags = [
+    `<title>${meta.title}</title>`,
+    `<meta property="og:title" content="${meta.title}" />`,
+    `<meta property="og:description" content="${meta.description}" />`,
+    `<meta property="og:image" content="${RX_OG_IMAGE}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:title" content="${meta.title}" />`,
+    `<meta name="twitter:image" content="${RX_OG_IMAGE}" />`,
+  ].join('\n    ')
+  const modified = html.replace(
+    /<title>[^<]*<\/title>/,
+    tags,
+  )
+  const headers = new Headers(response.headers)
+  headers.set('content-type', 'text/html; charset=utf-8')
+  return new Response(modified, { status: response.status, headers })
+}
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url)
   const path = url.pathname
 
   // Let public paths, embed paths, and static assets through unconditionally
   if (PUBLIC_PATHS.has(path) || isPublicEmbed(path) || STATIC_EXT.test(path)) {
-    return context.next()
+    const response = await context.next()
+    const meta = SOCIAL_META[path]
+    if (meta && (response.headers.get('content-type') ?? '').includes('text/html')) {
+      return injectSocialMeta(response, meta)
+    }
+    return response
   }
 
   const secret = context.env.SESSION_SECRET
