@@ -44,24 +44,21 @@ interface TripPartner {
 
 // ─── Partner carousel ─────────────────────────────────────────────────────────
 
-function PartnerCarousel({ partners }: { partners: TripPartner[] }) {
+function PartnerCarousel({ partners, panelWidth = 280 }: { partners: TripPartner[]; panelWidth?: number }) {
   if (partners.length === 0) return null
-  // Duplicate for seamless infinite scroll
   const items = [...partners, ...partners]
+  const cardH = 58
   return (
-    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, width: 220, overflow: 'hidden', borderRadius: 10, background: 'rgba(10,10,10,0.82)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.07)', padding: '7px 0' }}>
-      <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center', marginBottom: 6 }}>Partners</div>
-      <div style={{ overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', animation: 'rx-scroll 18s linear infinite', width: 'max-content', paddingLeft: 12 }}>
-          {items.map((p, i) => (
-            <div key={`${p.id}-${i}`} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {p.logoUrl
-                ? <img src={p.logoUrl} alt={p.name} style={{ height: 22, maxWidth: 70, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.7 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                : <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', fontWeight: 500 }}>{p.name}</span>
-              }
-            </div>
-          ))}
-        </div>
+    <div style={{ position: 'absolute', top: 12, left: panelWidth + 24, right: 52, zIndex: 1000, height: cardH, overflow: 'hidden', pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', animation: 'rx-scroll 25s linear infinite', width: 'max-content', height: cardH }}>
+        {items.map((p, i) => (
+          <div key={`${p.id}-${i}`} style={{ flexShrink: 0, width: 90, height: cardH, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 10px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+            {p.logoUrl
+              ? <img src={p.logoUrl} alt={p.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              : <span style={{ fontSize: 10, color: '#222', whiteSpace: 'nowrap', fontWeight: 600, textAlign: 'center' }}>{p.name}</span>
+            }
+          </div>
+        ))}
       </div>
       <style>{`@keyframes rx-scroll { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }`}</style>
     </div>
