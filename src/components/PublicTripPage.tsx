@@ -52,9 +52,9 @@ function PartnerCarousel({ partners, panelWidth = 280 }: { partners: TripPartner
     <div style={{ position: 'absolute', top: 12, left: panelWidth + 24, right: 52, zIndex: 1000, height: cardH, overflow: 'hidden', pointerEvents: 'none' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', animation: 'rx-scroll 25s linear infinite', width: 'max-content', height: cardH }}>
         {items.map((p, i) => (
-          <div key={`${p.id}-${i}`} style={{ flexShrink: 0, width: 90, height: cardH, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+          <div key={`${p.id}-${i}`} style={{ flexShrink: 0, width: 90, height: cardH, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
             {p.logoUrl
-              ? <img src={p.logoUrl} alt={p.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              ? <img src={p.logoUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
               : <span style={{ fontSize: 10, color: '#222', whiteSpace: 'nowrap', fontWeight: 600, textAlign: 'center' }}>{p.name}</span>
             }
           </div>
