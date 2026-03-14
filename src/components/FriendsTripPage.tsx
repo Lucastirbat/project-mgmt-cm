@@ -485,7 +485,7 @@ export default function FriendsTripPage() {
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
       {/* Map */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden' }}>
         {loading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 13, zIndex: 999 }}>Loading…</div>}
         {/* Public view button — top right floating */}
         <a href="/trip" style={{ position: 'absolute', top: 12, right: 52, zIndex: 1000, fontSize: 11, color: 'rgba(255,255,255,0.4)', textDecoration: 'none', padding: '5px 11px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>Public view →</a>
