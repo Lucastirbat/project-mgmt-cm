@@ -50,8 +50,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const trip = rx?.projects?.find((p) => p.id === 'euro-trip-2025')
     const mapBlock = trip?.blocks?.find((b) => b.type === 'travelmap')
     const stops = (mapBlock?.tripStops ?? []).map(({ contacts: _c, ...stop }) => stop)
+    const partners = (mapBlock as { tripPartners?: unknown[] } | undefined)?.tripPartners ?? []
 
-    return new Response(JSON.stringify({ stops }), { headers: CORS })
+    return new Response(JSON.stringify({ stops, partners }), { headers: CORS })
   } catch {
     return new Response(JSON.stringify({ error: 'Failed to parse data' }), { status: 500, headers: CORS })
   }

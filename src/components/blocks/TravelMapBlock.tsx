@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { Block, TripStop, TripEvent, TripContact, TripNeed } from '../../data/schema'
+import type { Block, TripStop, TripEvent, TripContact, TripNeed, TripPartner } from '../../data/schema'
 
 interface Props {
   block: Block
@@ -726,6 +726,69 @@ export default function TravelMapBlock({ block, onChange }: Props) {
         {selectedId ? `Insert stop after ${stops.find(s => s.id === selectedId)?.capital ?? 'selected'}` : 'Add stop'}
       </button>
 
+      {/* Partners */}
+      <PartnerManager partners={block.tripPartners ?? []} onChange={(p) => onChange({ ...block, tripPartners: p })} />
+
+    </div>
+  )
+}
+
+// ─── Partner Manager ──────────────────────────────────────────────────────────
+
+function PartnerManager({ partners, onChange }: { partners: TripPartner[]; onChange: (p: TripPartner[]) => void }) {
+  const [open, setOpen] = useState(false)
+
+  function addPartner() {
+    onChange([...partners, { id: `p-${uid()}`, name: 'Partner name', logoUrl: '' }])
+  }
+
+  function updatePartner(id: string, patch: Partial<TripPartner>) {
+    onChange(partners.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+  }
+
+  function removePartner(id: string) {
+    onChange(partners.filter((p) => p.id !== id))
+  }
+
+  return (
+    <div className="border border-surface-border rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-white/50 hover:text-white/70 transition-colors"
+      >
+        <span className="font-medium uppercase tracking-wider">Partners carousel ({partners.length})</span>
+        <span className="text-white/30">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-surface-border px-4 py-3 flex flex-col gap-3">
+          {partners.map((p) => (
+            <div key={p.id} className="flex items-center gap-2">
+              <input
+                value={p.name}
+                onChange={(e) => updatePartner(p.id, { name: e.target.value })}
+                placeholder="Name"
+                className="flex-1 min-w-0 bg-surface rounded px-2 py-1 text-xs text-white/80 border border-surface-border outline-none focus:border-accent/50"
+              />
+              <input
+                value={p.logoUrl ?? ''}
+                onChange={(e) => updatePartner(p.id, { logoUrl: e.target.value })}
+                placeholder="Logo URL (optional)"
+                className="flex-[2] min-w-0 bg-surface rounded px-2 py-1 text-xs text-white/80 border border-surface-border outline-none focus:border-accent/50"
+              />
+              {p.logoUrl && (
+                <img src={p.logoUrl} alt="" className="h-5 w-10 object-contain opacity-60" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              )}
+              <button onClick={() => removePartner(p.id)} className="text-white/20 hover:text-red-400 transition-colors text-sm leading-none">×</button>
+            </div>
+          ))}
+          <button onClick={addPartner} className="self-start flex items-center gap-1.5 text-xs text-white/30 hover:text-accent transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add partner
+          </button>
+        </div>
+      )}
     </div>
   )
 }

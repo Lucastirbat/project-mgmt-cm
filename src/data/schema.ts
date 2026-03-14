@@ -77,6 +77,12 @@ export interface TripStop {
   contacts: TripContact[]
 }
 
+export interface TripPartner {
+  id: string
+  name: string
+  logoUrl?: string
+}
+
 export type BlockType = 'tasks' | 'links' | 'notes' | 'kpi' | 'github' | 'calendar' | 'canva' | 'sheets' | 'profiles' | 'travelmap'
 
 export interface Block {
@@ -106,6 +112,7 @@ export interface Block {
   profiles?: ProfileItem[]
   // travelmap block
   tripStops?: TripStop[]
+  tripPartners?: TripPartner[]
 }
 
 // ——— Project ————————————————————————————————————————————————————————

@@ -36,6 +36,38 @@ interface TripStop {
   events: TripEvent[]
 }
 
+interface TripPartner {
+  id: string
+  name: string
+  logoUrl?: string
+}
+
+// ─── Partner carousel ─────────────────────────────────────────────────────────
+
+function PartnerCarousel({ partners }: { partners: TripPartner[] }) {
+  if (partners.length === 0) return null
+  // Duplicate for seamless infinite scroll
+  const items = [...partners, ...partners]
+  return (
+    <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, width: 220, overflow: 'hidden', borderRadius: 10, background: 'rgba(10,10,10,0.82)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.07)', padding: '7px 0' }}>
+      <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center', marginBottom: 6 }}>Partners</div>
+      <div style={{ overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', animation: 'rx-scroll 18s linear infinite', width: 'max-content', paddingLeft: 12 }}>
+          {items.map((p, i) => (
+            <div key={`${p.id}-${i}`} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {p.logoUrl
+                ? <img src={p.logoUrl} alt={p.name} style={{ height: 22, maxWidth: 70, objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.7 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                : <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', fontWeight: 500 }}>{p.name}</span>
+              }
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`@keyframes rx-scroll { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }`}</style>
+    </div>
+  )
+}
+
 // ─── Timeline constants & helpers ─────────────────────────────────────────────
 
 const MIN = 60_000
@@ -393,6 +425,7 @@ const RX_FAVICON = 'https://reaktorx.com/wp-content/uploads/2022/10/cropped-Grou
 
 export default function PublicTripPage() {
   const [stops, setStops] = useState<TripStop[]>([])
+  const [partners, setPartners] = useState<TripPartner[]>([])
   const [loading, setLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
 
@@ -430,8 +463,9 @@ export default function PublicTripPage() {
     setIsClient(true)
     fetch('/api/embed/trip')
       .then((r) => r.json())
-      .then((d: { stops: TripStop[] }) => {
+      .then((d: { stops: TripStop[]; partners?: TripPartner[] }) => {
         setStops(d.stops ?? [])
+        setPartners(d.partners ?? [])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -503,6 +537,9 @@ export default function PublicTripPage() {
             ) : null)}
           </MapContainer>
         )}
+
+        {/* Partner carousel — top right */}
+        <PartnerCarousel partners={partners} />
 
 {/* Left detail overlay — always visible, tracks playhead */}
         {panelStop && (

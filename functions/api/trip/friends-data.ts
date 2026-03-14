@@ -29,8 +29,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const trip = rx?.projects?.find((p) => p.id === 'euro-trip-2025')
     const mapBlock = trip?.blocks?.find((b) => b.type === 'travelmap')
     const stops = mapBlock?.tripStops ?? []
+    const partners = (mapBlock as { tripPartners?: unknown[] } | undefined)?.tripPartners ?? []
 
-    return new Response(JSON.stringify({ stops }), {
+    return new Response(JSON.stringify({ stops, partners }), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
     })
   } catch {
