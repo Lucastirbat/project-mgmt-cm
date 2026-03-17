@@ -486,12 +486,9 @@ export default function PublicTripPage() {
 
   // ── Map interaction → pause auto-play ───────────────────────────────────────
   const mapInteractingRef = useRef(false)
-  const mapInteractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleMapInteract = useCallback(() => {
     mapInteractingRef.current = true
-    if (mapInteractTimerRef.current) clearTimeout(mapInteractTimerRef.current)
-    mapInteractTimerRef.current = setTimeout(() => { mapInteractingRef.current = false }, 3000)
   }, [])
 
   // ── Auto-play: advance playhead slowly through the trip ───────────────────
