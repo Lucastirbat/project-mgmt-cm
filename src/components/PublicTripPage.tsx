@@ -3,8 +3,9 @@
  * No auth required. Fetches from /api/embed/trip (contacts stripped).
  */
 
-import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Marker, Polyline, Tooltip, useMap, ZoomControl } from 'react-leaflet'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -375,6 +376,21 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
   )
 }
 
+// ─── Map interaction tracker ──────────────────────────────────────────────────
+
+function MapInteractionTracker({ onInteract }: { onInteract: () => void }) {
+  const map = useMap()
+  const cb = useRef(onInteract)
+  cb.current = onInteract
+  useEffect(() => {
+    const h = () => cb.current()
+    map.on('mousedown', h)
+    map.on('touchstart', h)
+    return () => { map.off('mousedown', h); map.off('touchstart', h) }
+  }, [map])
+  return null
+}
+
 // ─── Map effects ──────────────────────────────────────────────────────────────
 
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -468,11 +484,58 @@ export default function PublicTripPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // ── Map interaction → pause auto-play ───────────────────────────────────────
+  const mapInteractingRef = useRef(false)
+  const mapInteractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleMapInteract = useCallback(() => {
+    mapInteractingRef.current = true
+    if (mapInteractTimerRef.current) clearTimeout(mapInteractTimerRef.current)
+    mapInteractTimerRef.current = setTimeout(() => { mapInteractingRef.current = false }, 3000)
+  }, [])
+
+  // ── Auto-play: advance playhead slowly through the trip ───────────────────
+  useEffect(() => {
+    if (!stops.length) return
+    const tripDuration = tripEndMs - tripStartMs
+    if (tripDuration <= 0) return
+    const PLAY_DURATION_MS = 120_000 // full trip traversal in 120 seconds
+    const advanceRatio = tripDuration / PLAY_DURATION_MS
+    let rafId: number
+    let lastTime: number | null = null
+    const tick = (now: number) => {
+      if (!mapInteractingRef.current) {
+        if (lastTime !== null) {
+          const dt = now - lastTime
+          setPlayheadMs(prev => {
+            const next = prev + dt * advanceRatio
+            return next >= tripEndMs ? tripStartMs : next
+          })
+        }
+        lastTime = now
+      } else {
+        lastTime = null
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [stops.length, tripStartMs, tripEndMs])
+
   const currentStop = stops.find((s) => stopStatus(s) === 'current')
   const panelStop = getStopAtPlayhead(stops, playheadMs)
 
   const mapCenter: [number, number] = currentStop ? [currentStop.lat, currentStop.lng] : [50.0, 20.0]
   const travelerPos = getTravelerPos(stops, playheadMs)
+  const facePos: [number, number] | null = travelerPos ?? (panelStop ? [panelStop.lat, panelStop.lng] : null)
+  const faceProgress = tripEndMs > tripStartMs ? (playheadMs - tripStartMs) / (tripEndMs - tripStartMs) : 0
+  const faceSrc = faceProgress < 1 / 3 ? '/face1.png' : faceProgress < 2 / 3 ? '/face2.png' : '/face3.png'
+  const faceIcon = useMemo(() => L.divIcon({
+    html: `<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid #6366f1;overflow:hidden;box-shadow:0 0 14px rgba(99,102,241,0.75);background:#111"><img src="${faceSrc}" style="width:100%;height:100%;object-fit:cover"/></div>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    className: '',
+  }), [faceSrc])
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0a0a0a', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
@@ -485,6 +548,7 @@ export default function PublicTripPage() {
             <ZoomControl position="topright" />
             <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap &copy; CARTO' />
             <MapEffects />
+            <MapInteractionTracker onInteract={handleMapInteract} />
 
             {/* Route segments */}
             {stops.slice(1).map((stop, i) => {
@@ -514,13 +578,15 @@ export default function PublicTripPage() {
               )
             })}
 
-            {/* Animated traveler marker */}
-            {travelerPos && (
-              <CircleMarker center={travelerPos} radius={8} pathOptions={{ fillColor: ACCENT, fillOpacity: 1, color: '#fff', weight: 2.5 }}>
-                <Tooltip direction="top" offset={[0, -10]} opacity={0.95} permanent={false}>
-                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>✈️ In transit</span>
+            {/* Face traveler marker — always visible, auto-animates along route */}
+            {facePos && (
+              <Marker position={facePos} icon={faceIcon}>
+                <Tooltip direction="top" offset={[0, -24]} opacity={0.95} permanent={false}>
+                  <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
+                    {travelerPos ? '✈️ In transit' : `📍 ${panelStop?.capital}`}
+                  </span>
                 </Tooltip>
-              </CircleMarker>
+              </Marker>
             )}
 
             {/* Venue markers for current stop's events */}
