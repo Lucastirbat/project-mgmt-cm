@@ -169,12 +169,13 @@ function getTravelerPos(stops: TripStop[], playheadMs: number): [number, number]
 
 // ─── Timeline component ───────────────────────────────────────────────────────
 
-function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, viewEndMs, onPlayheadChange, onViewChange, accent }: {
+function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, viewEndMs, onPlayheadChange, onViewChange, onInteract, accent }: {
   stops: TripStop[]
   tripStartMs: number; tripEndMs: number
   playheadMs: number; viewStartMs: number; viewEndMs: number
   onPlayheadChange: (ms: number) => void
   onViewChange: (s: number, e: number) => void
+  onInteract: () => void
   accent: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -296,8 +297,8 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
       ref={containerRef}
       style={{ position: 'relative', height: 72, flexShrink: 0, backgroundColor: 'rgba(0,0,0,0.35)', borderTop: '1px solid rgba(255,255,255,0.06)', cursor: 'grab', userSelect: 'none', overflow: 'visible', touchAction: 'none' }}
       onWheel={handleWheel}
-      onMouseDown={(e) => { const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }; e.preventDefault() }}
-      onTouchStart={(e) => { const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.touches[0].clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs } }}
+      onMouseDown={(e) => { onInteract(); const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs }; e.preventDefault() }}
+      onTouchStart={(e) => { onInteract(); const rect = containerRef.current!.getBoundingClientRect(); dragging.current = 'pan'; panAnchor.current = { mouseX: e.touches[0].clientX - rect.left, viewStart: viewStartMs, viewEnd: viewEndMs } }}
     >
       {/* Past zone */}
       <div style={{ position: 'absolute', top: 0, bottom: 0, left: Math.max(0, msToX(tripStartMs)), width: Math.max(0, Math.min(playheadX, containerWidth) - Math.max(0, msToX(tripStartMs))), backgroundColor: `${accent}10`, pointerEvents: 'none' }} />
@@ -363,8 +364,8 @@ function TripTimeline({ stops, tripStartMs, tripEndMs, playheadMs, viewStartMs, 
         return (
           <div
             style={{ position: 'absolute', top: -34, left: playheadX - 24, width: 48, height: 48, borderRadius: '50%', border: `2.5px solid ${accent}`, cursor: 'ew-resize', boxShadow: `0 0 14px ${accent}c0`, zIndex: 2000, pointerEvents: 'auto', overflow: 'hidden', background: '#111' }}
-            onMouseDown={(e) => { dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
-            onTouchStart={(e) => { dragging.current = 'playhead'; e.stopPropagation() }}
+            onMouseDown={(e) => { onInteract(); dragging.current = 'playhead'; e.preventDefault(); e.stopPropagation() }}
+            onTouchStart={(e) => { onInteract(); dragging.current = 'playhead'; e.stopPropagation() }}
           >
             <img src={faceSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           </div>
@@ -673,6 +674,7 @@ export default function PublicTripPage() {
           playheadMs={playheadMs} viewStartMs={viewStartMs} viewEndMs={viewEndMs}
           onPlayheadChange={setPlayheadMs}
           onViewChange={(s, e) => { setViewStartMs(s); setViewEndMs(e) }}
+          onInteract={handleMapInteract}
           accent={ACCENT}
         />
       )}
